@@ -54,7 +54,7 @@ def init_db():
         )
     """)
 
-    default_genres = ["Komediya", "Drama", "Action", "Triller", "Animatsiya", "Melodrama", "Qo'rqinchli", "Fantastika"]
+    default_genres = ["Fantastika", "Drama", "Komediya", "Qo'rqinchli"]
     for g in default_genres:
         c.execute("INSERT INTO genres (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (g,))
 
