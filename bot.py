@@ -7,7 +7,8 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 
 import database as db
-from handlers import user, admin
+import user
+import admin
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,17 +16,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 async def main():
     token = os.getenv("BOT_TOKEN")
     if not token:
         raise ValueError("BOT_TOKEN environment variable is not set!")
 
-    # Init DB
     db.init_db()
     logger.info("Database initialized")
 
-    # Super admin avtomatik qo'shilsin
     super_admin_id = os.getenv("SUPER_ADMIN_ID")
     if super_admin_id:
         db.add_admin(int(super_admin_id), "super_admin")
@@ -37,14 +35,12 @@ async def main():
     )
     dp = Dispatcher(storage=MemoryStorage())
 
-    # Routerlarni ulash — admin birinchi bo'lishi kerak
     dp.include_router(admin.router)
     dp.include_router(user.router)
 
     logger.info("Bot ishga tushmoqda...")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
