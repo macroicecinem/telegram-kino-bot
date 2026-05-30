@@ -9,7 +9,6 @@ import database as db
 router = Router()
 
 
-# ── FSM States ─────────────────────────────────────────
 class AddMovie(StatesGroup):
     title = State()
     link = State()
@@ -27,17 +26,6 @@ class AddAdmin(StatesGroup):
     user_id = State()
 
 
-# ── Admin tekshirish ───────────────────────────────────
-def admin_only(func):
-    async def wrapper(message: Message, *args, **kwargs):
-        if not db.is_admin(message.from_user.id):
-            await message.answer("❌ Siz admin emassiz!")
-            return
-        return await func(message, *args, **kwargs)
-    wrapper.__name__ = func.__name__
-    return wrapper
-
-
 def admin_panel_keyboard():
     builder = InlineKeyboardBuilder()
     builder.button(text="🎬 Kino qo'shish", callback_data="admin:add_movie")
@@ -46,25 +34,24 @@ def admin_panel_keyboard():
     builder.button(text="📂 Janrlar", callback_data="admin:list_genres")
     builder.button(text="👥 Adminlar", callback_data="admin:list_admins")
     builder.button(text="➕ Admin qo'shish", callback_data="admin:add_admin")
+    builder.button(text="📊 Statistika", callback_data="admin:stats")
     builder.adjust(2)
     return builder.as_markup()
 
 
-# ── /admin ─────────────────────────────────────────────
 @router.message(Command("admin"))
 async def cmd_admin(message: Message):
     if not db.is_admin(message.from_user.id):
         await message.answer("❌ Siz admin emassiz!")
         return
     count = db.get_movies_count()
+    users = db.get_users_count()
     await message.answer(
-        f"👨‍💼 *Admin Panel*\n\nBazada: *{count} ta* kino\n\nNima qilasiz?",
-        parse_mode="Markdown",
+        f"👨‍💼 <b>Admin Panel</b>\n\nKinolar: <b>{count} ta</b> | Foydalanuvchilar: <b>{users} ta</b>",
         reply_markup=admin_panel_keyboard()
     )
 
 
-# ── Admin panel callback ───────────────────────────────
 @router.callback_query(F.data.startswith("admin:"))
 async def admin_callback(call: CallbackQuery, state: FSMContext):
     if not db.is_admin(call.from_user.id):
@@ -89,8 +76,7 @@ async def admin_callback(call: CallbackQuery, state: FSMContext):
         builder.button(text="⬅️ Panel", callback_data="admin:back")
         builder.adjust(1)
         await call.message.edit_text(
-            f"📋 *Barcha kinolar* ({len(movies)} ta)\n\n🗑 O'chirish uchun bosing:",
-            parse_mode="Markdown",
+            f"📋 <b>Barcha kinolar</b> ({len(movies)} ta)\n\n🗑 O'chirish uchun bosing:",
             reply_markup=builder.as_markup()
         )
 
@@ -107,8 +93,7 @@ async def admin_callback(call: CallbackQuery, state: FSMContext):
         builder.button(text="⬅️ Panel", callback_data="admin:back")
         builder.adjust(2)
         await call.message.edit_text(
-            f"📂 *Janrlar* ({len(genres)} ta)\n\n🗑 O'chirish uchun bosing:",
-            parse_mode="Markdown",
+            f"📂 <b>Janrlar</b> ({len(genres)} ta)\n\n🗑 O'chirish uchun bosing:",
             reply_markup=builder.as_markup()
         )
 
@@ -120,26 +105,38 @@ async def admin_callback(call: CallbackQuery, state: FSMContext):
             builder.button(text=f"🗑 {name}", callback_data=f"del_admin:{a['user_id']}")
         builder.button(text="⬅️ Panel", callback_data="admin:back")
         builder.adjust(1)
-        text = f"👥 *Adminlar* ({len(admins)} ta)"
+        text = f"👥 <b>Adminlar</b> ({len(admins)} ta)"
         if not admins:
             text += "\n\nHozircha qo'shimcha admin yo'q."
-        await call.message.edit_text(text, parse_mode="Markdown", reply_markup=builder.as_markup())
+        await call.message.edit_text(text, reply_markup=builder.as_markup())
 
     elif action == "add_admin":
         await state.set_state(AddAdmin.user_id)
-        await call.message.answer("👤 Admin qilmoqchi bo'lgan foydalanuvchining *Telegram ID* sini kiriting:\n\n_(ID ni bilish uchun @userinfobot ga /start yuboring)_", parse_mode="Markdown")
+        await call.message.answer(
+            "👤 Admin qilmoqchi bo'lgan foydalanuvchining <b>Telegram ID</b> sini kiriting:\n\n"
+            "<i>(ID ni bilish uchun @userinfobot ga /start yuboring)</i>"
+        )
         await call.answer()
+
+    elif action == "stats":
+        count = db.get_movies_count()
+        users = db.get_users_count()
+        await call.message.edit_text(
+            f"📊 <b>Statistika</b>\n\n"
+            f"🎬 Kinolar: <b>{count} ta</b>\n"
+            f"👥 Foydalanuvchilar: <b>{users} ta</b>",
+            reply_markup=admin_panel_keyboard()
+        )
 
     elif action == "back":
         count = db.get_movies_count()
+        users = db.get_users_count()
         await call.message.edit_text(
-            f"👨‍💼 *Admin Panel*\n\nBazada: *{count} ta* kino\n\nNima qilasiz?",
-            parse_mode="Markdown",
+            f"👨‍💼 <b>Admin Panel</b>\n\nKinolar: <b>{count} ta</b> | Foydalanuvchilar: <b>{users} ta</b>",
             reply_markup=admin_panel_keyboard()
         )
 
 
-# ── Kino o'chirish ─────────────────────────────────────
 @router.callback_query(F.data.startswith("del_movie:"))
 async def delete_movie(call: CallbackQuery):
     if not db.is_admin(call.from_user.id):
@@ -150,7 +147,6 @@ async def delete_movie(call: CallbackQuery):
     if movie:
         db.delete_movie(movie_id)
         await call.answer(f"✅ '{movie['title']}' o'chirildi!", show_alert=True)
-        # Refresh list
         movies = db.get_all_movies()
         builder = InlineKeyboardBuilder()
         for m in movies:
@@ -159,15 +155,13 @@ async def delete_movie(call: CallbackQuery):
         builder.adjust(1)
         if movies:
             await call.message.edit_text(
-                f"📋 *Barcha kinolar* ({len(movies)} ta)\n\n🗑 O'chirish uchun bosing:",
-                parse_mode="Markdown",
+                f"📋 <b>Barcha kinolar</b> ({len(movies)} ta)\n\n🗑 O'chirish uchun bosing:",
                 reply_markup=builder.as_markup()
             )
         else:
             await call.message.edit_text("📋 Hali kino yo'q.", reply_markup=admin_panel_keyboard())
 
 
-# ── Janr o'chirish ─────────────────────────────────────
 @router.callback_query(F.data.startswith("del_genre:"))
 async def delete_genre(call: CallbackQuery):
     if not db.is_admin(call.from_user.id):
@@ -183,13 +177,11 @@ async def delete_genre(call: CallbackQuery):
     builder.button(text="⬅️ Panel", callback_data="admin:back")
     builder.adjust(2)
     await call.message.edit_text(
-        f"📂 *Janrlar* ({len(genres)} ta)\n\n🗑 O'chirish uchun bosing:",
-        parse_mode="Markdown",
+        f"📂 <b>Janrlar</b> ({len(genres)} ta)\n\n🗑 O'chirish uchun bosing:",
         reply_markup=builder.as_markup()
     )
 
 
-# ── Admin o'chirish ────────────────────────────────────
 @router.callback_query(F.data.startswith("del_admin:"))
 async def delete_admin(call: CallbackQuery):
     if not db.is_admin(call.from_user.id):
@@ -206,13 +198,11 @@ async def delete_admin(call: CallbackQuery):
     builder.button(text="⬅️ Panel", callback_data="admin:back")
     builder.adjust(1)
     await call.message.edit_text(
-        f"👥 *Adminlar* ({len(admins)} ta)",
-        parse_mode="Markdown",
+        f"👥 <b>Adminlar</b> ({len(admins)} ta)",
         reply_markup=builder.as_markup()
     )
 
 
-# ── AddMovie FSM ───────────────────────────────────────
 @router.message(AddMovie.title)
 async def add_movie_title(message: Message, state: FSMContext):
     await state.update_data(title=message.text.strip())
@@ -224,7 +214,6 @@ async def add_movie_title(message: Message, state: FSMContext):
 async def add_movie_link(message: Message, state: FSMContext):
     await state.update_data(link=message.text.strip())
     await state.set_state(AddMovie.genre)
-
     genres = db.get_genres()
     builder = InlineKeyboardBuilder()
     for g in genres:
@@ -239,7 +228,7 @@ async def add_movie_genre(call: CallbackQuery, state: FSMContext):
     genre_id = int(call.data.split(":")[1])
     await state.update_data(genre_id=genre_id if genre_id != 0 else None)
     await state.set_state(AddMovie.year)
-    await call.message.answer("📅 Yilini kiriting (masalan: 2024) yoki o'tkazib yuborish uchun 0 kiriting:")
+    await call.message.answer("📅 Yilini kiriting (masalan: 2024) yoki 0:")
     await call.answer()
 
 
@@ -255,7 +244,7 @@ async def add_movie_year(message: Message, state: FSMContext):
             return
     await state.update_data(year=year)
     await state.set_state(AddMovie.description)
-    await message.answer("📝 Tavsif kiriting (yoki o'tkazib yuborish uchun — deb yozing):")
+    await message.answer("📝 Tavsif kiriting (yoki — deb yozing):")
 
 
 @router.message(AddMovie.description)
@@ -263,14 +252,13 @@ async def add_movie_desc(message: Message, state: FSMContext):
     desc = message.text.strip()
     await state.update_data(description=None if desc == "—" else desc)
     await state.set_state(AddMovie.poster)
-    await message.answer("🖼 Poster URL ni kiriting (yoki o'tkazib yuborish uchun — deb yozing):")
+    await message.answer("🖼 Poster URL kiriting (yoki — deb yozing):")
 
 
 @router.message(AddMovie.poster)
 async def add_movie_poster(message: Message, state: FSMContext):
     poster = message.text.strip()
     await state.update_data(poster_url=None if poster == "—" else poster)
-
     data = await state.get_data()
     movie_id = db.add_movie(
         title=data["title"],
@@ -282,21 +270,18 @@ async def add_movie_poster(message: Message, state: FSMContext):
     )
     await state.clear()
     await message.answer(
-        f"✅ *{data['title']}* muvaffaqiyatli qo'shildi! (ID: {movie_id})\n\n/admin — panelga qaytish",
-        parse_mode="Markdown"
+        f"✅ <b>{data['title']}</b> qo'shildi! (ID: {movie_id})\n\n/admin — panelga qaytish"
     )
 
 
-# ── AddGenre FSM ───────────────────────────────────────
 @router.message(AddGenre.name)
 async def add_genre_name(message: Message, state: FSMContext):
     name = message.text.strip()
     db.add_genre(name)
     await state.clear()
-    await message.answer(f"✅ *{name}* janri qo'shildi!\n\n/admin — panelga qaytish", parse_mode="Markdown")
+    await message.answer(f"✅ <b>{name}</b> janri qo'shildi!\n\n/admin — panelga qaytish")
 
 
-# ── AddAdmin FSM ───────────────────────────────────────
 @router.message(AddAdmin.user_id)
 async def add_admin_id(message: Message, state: FSMContext):
     try:
