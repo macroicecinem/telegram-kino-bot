@@ -113,6 +113,19 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
     await show_main_menu(message)
 
 
+
+
+# ── /kinolar ───────────────────────────────────────────
+@router.message(Command("kinolar"))
+async def cmd_kinolar(message: Message, bot: Bot):
+    if not await check_subscription(bot, message.from_user.id):
+        await message.answer(
+            "❌ <b>MACROICE kanallariga obuna bo'ling:</b>",
+            reply_markup=subscription_keyboard()
+        )
+        return
+    await show_main_menu(message)
+
 # ── Telefon qabul qilish ───────────────────────────────
 @router.message(Registration.phone, F.contact)
 async def get_phone(message: Message, state: FSMContext, bot: Bot):
