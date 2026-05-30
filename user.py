@@ -1,10 +1,47 @@
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram import Router, F, Bot
+from aiogram.types import Message, CallbackQuery, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from aiogram.filters import CommandStart, Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import database as db
 
 router = Router()
+
+TELEGRAM_CHANNEL = "@macroicecinema"
+YOUTUBE_URL = "https://www.youtube.com/@MACROICEcinema"
+INSTAGRAM_URL = "https://www.instagram.com/macroice_cinema/"
+
+
+class Registration(StatesGroup):
+    phone = State()
+
+
+async def check_subscription(bot: Bot, user_id: int) -> bool:
+    try:
+        member = await bot.get_chat_member(TELEGRAM_CHANNEL, user_id)
+        return member.status not in ("left", "kicked", "banned")
+    except Exception:
+        return False
+
+
+def subscription_keyboard():
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📺 Telegram kanal", url=f"https://t.me/macroicecinema")
+    builder.button(text="▶️ YouTube kanal", url=YOUTUBE_URL)
+    builder.button(text="📸 Instagram", url=INSTAGRAM_URL)
+    builder.button(text="✅ Obuna bo'ldim!", callback_data="check_sub")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def phone_keyboard():
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="📱 Telefon raqamimni yuborish", request_contact=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+    return kb
 
 
 def genres_keyboard():
@@ -35,38 +72,107 @@ def movie_keyboard(movie: dict):
     return builder.as_markup()
 
 
-# ── /start ─────────────────────────────────────────────
-@router.message(CommandStart())
-async def cmd_start(message: Message):
+async def show_main_menu(message: Message):
     count = db.get_movies_count()
     await message.answer(
-        f"🎬 *Kino Botga xush kelibsiz!*\n\n"
-        f"Bazada hozir *{count} ta* kino mavjud.\n\n"
+        f"🎬 <b>Kino Botga xush kelibsiz!</b>\n\n"
+        f"Bazada hozir <b>{count} ta</b> kino mavjud.\n\n"
         f"Janrni tanlang yoki qidirish tugmasini bosing 👇",
-        parse_mode="Markdown",
         reply_markup=genres_keyboard()
     )
 
 
-# ── /kinolar ───────────────────────────────────────────
-@router.message(Command("kinolar"))
-async def cmd_movies(message: Message):
+# ── /start ─────────────────────────────────────────────
+@router.message(CommandStart())
+async def cmd_start(message: Message, state: FSMContext, bot: Bot):
+    user_id = message.from_user.id
+
+    # Ro'yxatdan o'tganmi?
+    user = db.get_user(user_id)
+
+    if not user:
+        # Yangi foydalanuvchi — telefon so'ra
+        await state.set_state(Registration.phone)
+        await message.answer(
+            "👋 <b>Salom!</b>\n\n"
+            "Botdan foydalanish uchun telefon raqamingizni tasdiqlang 👇",
+            reply_markup=phone_keyboard()
+        )
+        return
+
+    # Obunani tekshir
+    subscribed = await check_subscription(bot, user_id)
+    if not subscribed:
+        await message.answer(
+            "❌ <b>Botdan foydalanish uchun quyidagi kanallarga obuna bo'ling:</b>\n\n"
+            "Obuna bo'lgach <b>✅ Obuna bo'ldim!</b> tugmasini bosing.",
+            reply_markup=subscription_keyboard()
+        )
+        return
+
+    await show_main_menu(message)
+
+
+# ── Telefon qabul qilish ───────────────────────────────
+@router.message(Registration.phone, F.contact)
+async def get_phone(message: Message, state: FSMContext, bot: Bot):
+    contact = message.contact
+    user_id = message.from_user.id
+    phone = contact.phone_number
+    username = message.from_user.username
+    full_name = message.from_user.full_name
+
+    db.add_user(user_id, phone, username, full_name)
+    await state.clear()
+
     await message.answer(
-        "🎬 *Janrni tanlang:*",
-        parse_mode="Markdown",
-        reply_markup=genres_keyboard()
+        "✅ <b>Telefon raqam tasdiqlandi!</b>",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
+    # Obunani tekshir
+    subscribed = await check_subscription(bot, user_id)
+    if not subscribed:
+        await message.answer(
+            "📢 <b>Botdan foydalanish uchun quyidagi kanallarga obuna bo'ling:</b>\n\n"
+            "Obuna bo'lgach <b>✅ Obuna bo'ldim!</b> tugmasini bosing.",
+            reply_markup=subscription_keyboard()
+        )
+        return
+
+    await show_main_menu(message)
+
+
+@router.message(Registration.phone)
+async def wrong_phone(message: Message):
+    await message.answer(
+        "📱 Iltimos, tugma orqali telefon raqamingizni yuboring:",
+        reply_markup=phone_keyboard()
     )
 
 
-# ── /qidirish ──────────────────────────────────────────
-@router.message(Command("qidirish"))
-async def cmd_search(message: Message):
-    await message.answer("🔍 Kino nomini yozing:")
+# ── Obuna tekshirish ───────────────────────────────────
+@router.callback_query(F.data == "check_sub")
+async def check_sub_callback(call: CallbackQuery, bot: Bot):
+    subscribed = await check_subscription(bot, call.from_user.id)
+    if not subscribed:
+        await call.answer(
+            "❌ Siz hali @macroicecinema kanaliga obuna bo'lmadingiz!",
+            show_alert=True
+        )
+        return
+
+    await call.message.delete()
+    await show_main_menu(call.message)
 
 
 # ── Janr tanlandi ──────────────────────────────────────
 @router.callback_query(F.data.startswith("genre:"))
-async def genre_selected(call: CallbackQuery):
+async def genre_selected(call: CallbackQuery, bot: Bot):
+    if not await check_subscription(bot, call.from_user.id):
+        await call.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
+        return
+
     genre_id = int(call.data.split(":")[1])
     movies = db.get_movies_by_genre(genre_id)
     genre = next((g for g in db.get_genres() if g["id"] == genre_id), None)
@@ -76,15 +182,18 @@ async def genre_selected(call: CallbackQuery):
         return
 
     await call.message.edit_text(
-        f"🎬 *{genre['name']}* — {len(movies)} ta kino\n\nKinoni tanlang:",
-        parse_mode="Markdown",
+        f"🎬 <b>{genre['name']}</b> — {len(movies)} ta kino\n\nKinoni tanlang:",
         reply_markup=movies_keyboard(genre_id)
     )
 
 
 # ── Kino tanlandi ──────────────────────────────────────
 @router.callback_query(F.data.startswith("movie:"))
-async def movie_selected(call: CallbackQuery):
+async def movie_selected(call: CallbackQuery, bot: Bot):
+    if not await check_subscription(bot, call.from_user.id):
+        await call.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
+        return
+
     movie_id = int(call.data.split(":")[1])
     movie = db.get_movie(movie_id)
 
@@ -92,14 +201,13 @@ async def movie_selected(call: CallbackQuery):
         await call.answer("Kino topilmadi 😕", show_alert=True)
         return
 
-    text = f"🎬 *{movie['title']}*\n"
+    text = f"🎬 <b>{movie['title']}</b>\n"
     if movie["year"]:
         text += f"📅 Yil: {movie['year']}\n"
     if movie["genre_name"]:
         text += f"🎭 Janr: {movie['genre_name']}\n"
     if movie["description"]:
         text += f"\n📝 {movie['description']}\n"
-
     text += "\n👇 Ko'rish uchun tugmani bosing:"
 
     kb = movie_keyboard(dict(movie))
@@ -109,14 +217,13 @@ async def movie_selected(call: CallbackQuery):
             await call.message.answer_photo(
                 photo=movie["poster_url"],
                 caption=text,
-                parse_mode="Markdown",
                 reply_markup=kb
             )
             await call.message.delete()
         except Exception:
-            await call.message.edit_text(text, parse_mode="Markdown", reply_markup=kb)
+            await call.message.edit_text(text, reply_markup=kb)
     else:
-        await call.message.edit_text(text, parse_mode="Markdown", reply_markup=kb)
+        await call.message.edit_text(text, reply_markup=kb)
 
 
 # ── Orqaga ─────────────────────────────────────────────
@@ -124,24 +231,32 @@ async def movie_selected(call: CallbackQuery):
 async def back_to_genres(call: CallbackQuery):
     count = db.get_movies_count()
     await call.message.edit_text(
-        f"🎬 *Kino Botga xush kelibsiz!*\n\n"
-        f"Bazada hozir *{count} ta* kino mavjud.\n\n"
+        f"🎬 <b>Kino Botga xush kelibsiz!</b>\n\n"
+        f"Bazada hozir <b>{count} ta</b> kino mavjud.\n\n"
         f"Janrni tanlang yoki qidirish tugmasini bosing 👇",
-        parse_mode="Markdown",
         reply_markup=genres_keyboard()
     )
 
 
 # ── Qidirish ───────────────────────────────────────────
 @router.callback_query(F.data == "search")
-async def search_prompt(call: CallbackQuery):
-    await call.message.answer("🔍 Kino nomini yozing (masalan: *Avatar*):", parse_mode="Markdown")
+async def search_prompt(call: CallbackQuery, bot: Bot):
+    if not await check_subscription(bot, call.from_user.id):
+        await call.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
+        return
+    await call.message.answer("🔍 Kino nomini yozing:")
     await call.answer()
 
 
 @router.message(F.text & ~F.text.startswith("/"))
-async def handle_text(message: Message):
-    # Check if it looks like a search query
+async def handle_text(message: Message, bot: Bot):
+    if not await check_subscription(bot, message.from_user.id):
+        await message.answer(
+            "❌ Botdan foydalanish uchun kanalga obuna bo'ling:",
+            reply_markup=subscription_keyboard()
+        )
+        return
+
     query = message.text.strip()
     if len(query) < 2:
         return
@@ -149,8 +264,7 @@ async def handle_text(message: Message):
     results = db.search_movies(query)
     if not results:
         await message.answer(
-            f"❌ *\"{query}\"* bo'yicha hech narsa topilmadi.\n\n/kinolar — barcha kinolarni ko'rish",
-            parse_mode="Markdown"
+            f"❌ <b>\"{query}\"</b> bo'yicha hech narsa topilmadi.\n\n/kinolar — barcha kinolarni ko'rish"
         )
         return
 
@@ -164,7 +278,6 @@ async def handle_text(message: Message):
     builder.adjust(1)
 
     await message.answer(
-        f"🔍 *\"{query}\"* bo'yicha {len(results)} ta natija:",
-        parse_mode="Markdown",
+        f"🔍 <b>\"{query}\"</b> bo'yicha {len(results)} ta natija:",
         reply_markup=builder.as_markup()
     )
