@@ -75,7 +75,7 @@ def movie_keyboard(movie: dict):
 async def show_main_menu(message: Message):
     count = db.get_movies_count()
     await message.answer(
-        f"🎬 <b>Kino Botga xush kelibsiz!</b>\n\n"
+        f"🎬 <b>MACROICE Cinema botiga xush kelibsiz!</b>\n\n"
         f"Bazada hozir <b>{count} ta</b> kino mavjud.\n\n"
         f"Janrni tanlang yoki qidirish tugmasini bosing 👇",
         reply_markup=genres_keyboard()
@@ -94,7 +94,7 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
         # Yangi foydalanuvchi — telefon so'ra
         await state.set_state(Registration.phone)
         await message.answer(
-            "👋 <b>Salom!</b>\n\n"
+            "👋 <b>Assalomu alaykum!</b>\n\n"
             "Botdan foydalanish uchun telefon raqamingizni tasdiqlang 👇",
             reply_markup=phone_keyboard()
         )
@@ -104,7 +104,7 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
     subscribed = await check_subscription(bot, user_id)
     if not subscribed:
         await message.answer(
-            "❌ <b>Botdan foydalanish uchun quyidagi kanallarga obuna bo'ling:</b>\n\n"
+            "❌ <b>MACROICE kanallariga obuna bo'ling:</b>\n\n"
             "Obuna bo'lgach <b>✅ Obuna bo'ldim!</b> tugmasini bosing.",
             reply_markup=subscription_keyboard()
         )
@@ -134,7 +134,7 @@ async def get_phone(message: Message, state: FSMContext, bot: Bot):
     subscribed = await check_subscription(bot, user_id)
     if not subscribed:
         await message.answer(
-            "📢 <b>Botdan foydalanish uchun quyidagi kanallarga obuna bo'ling:</b>\n\n"
+            "📢 <b>MACROICE kanallariga obuna bo'ling:</b>\n\n"
             "Obuna bo'lgach <b>✅ Obuna bo'ldim!</b> tugmasini bosing.",
             reply_markup=subscription_keyboard()
         )
@@ -231,7 +231,7 @@ async def movie_selected(call: CallbackQuery, bot: Bot):
 async def back_to_genres(call: CallbackQuery):
     count = db.get_movies_count()
     await call.message.edit_text(
-        f"🎬 <b>Kino Botga xush kelibsiz!</b>\n\n"
+        f"🎬 <b>MACROICE Cinema botiga xush kelibsiz!</b>\n\n"
         f"Bazada hozir <b>{count} ta</b> kino mavjud.\n\n"
         f"Janrni tanlang yoki qidirish tugmasini bosing 👇",
         reply_markup=genres_keyboard()
