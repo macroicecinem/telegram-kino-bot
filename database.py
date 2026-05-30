@@ -43,12 +43,53 @@ def init_db():
         )
     """)
 
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT UNIQUE NOT NULL,
+            phone TEXT,
+            username TEXT,
+            full_name TEXT,
+            registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     default_genres = ["Komediya", "Drama", "Action", "Triller", "Animatsiya", "Melodrama", "Qo'rqinchli", "Fantastika"]
     for g in default_genres:
         c.execute("INSERT INTO genres (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (g,))
 
     conn.commit()
     conn.close()
+
+
+# ── USER ───────────────────────────────────────────────
+def get_user(user_id: int):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM users WHERE user_id=%s", (user_id,))
+    row = c.fetchone()
+    conn.close()
+    return row
+
+
+def add_user(user_id: int, phone: str, username: str = None, full_name: str = None):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO users (user_id, phone, username, full_name) VALUES (%s,%s,%s,%s) ON CONFLICT (user_id) DO UPDATE SET phone=%s, username=%s, full_name=%s",
+        (user_id, phone, username, full_name, phone, username, full_name)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_users_count() -> int:
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) as cnt FROM users")
+    row = c.fetchone()
+    conn.close()
+    return row["cnt"]
 
 
 # ── ADMIN ──────────────────────────────────────────────
