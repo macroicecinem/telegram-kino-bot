@@ -1,6 +1,6 @@
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
-from aiogram.filters import Command
+from aiogram import Router, F, Bot
+from aiogram.types import Message, CallbackQuery, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -8,287 +8,276 @@ import database as db
 
 router = Router()
 
-
-class AddMovie(StatesGroup):
-    title = State()
-    link = State()
-    genre = State()
-    description = State()
-    poster = State()
-    year = State()
+TELEGRAM_CHANNEL = "@macroicecinema"
+YOUTUBE_URL = "https://www.youtube.com/@MACROICEcinema"
+INSTAGRAM_URL = "https://www.instagram.com/macroice_cinema/"
 
 
-class AddGenre(StatesGroup):
-    name = State()
+class Registration(StatesGroup):
+    phone = State()
 
 
-class AddAdmin(StatesGroup):
-    user_id = State()
+async def check_subscription(bot: Bot, user_id: int) -> bool:
+    try:
+        member = await bot.get_chat_member(TELEGRAM_CHANNEL, user_id)
+        return member.status not in ("left", "kicked", "banned")
+    except Exception:
+        return False
 
 
-def admin_panel_keyboard():
+def subscription_keyboard():
     builder = InlineKeyboardBuilder()
-    builder.button(text="🎬 Kino qo'shish", callback_data="admin:add_movie")
-    builder.button(text="📋 Barcha kinolar", callback_data="admin:list_movies")
-    builder.button(text="🎭 Janr qo'shish", callback_data="admin:add_genre")
-    builder.button(text="📂 Janrlar", callback_data="admin:list_genres")
-    builder.button(text="👥 Adminlar", callback_data="admin:list_admins")
-    builder.button(text="➕ Admin qo'shish", callback_data="admin:add_admin")
-    builder.button(text="📊 Statistika", callback_data="admin:stats")
+    builder.button(text="📺 Telegram kanal", url=f"https://t.me/macroicecinema")
+    builder.button(text="▶️ YouTube kanal", url=YOUTUBE_URL)
+    builder.button(text="📸 Instagram", url=INSTAGRAM_URL)
+    builder.button(text="✅ Obuna bo'ldim!", callback_data="check_sub")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def phone_keyboard():
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="📱 Telefon raqamimni yuborish", request_contact=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+    return kb
+
+
+def genres_keyboard():
+    genres = db.get_genres()
+    builder = InlineKeyboardBuilder()
+    for g in genres:
+        builder.button(text=f"🎬 {g['name']}", callback_data=f"genre:{g['id']}")
+    builder.button(text="🔍 Qidirish", callback_data="search")
     builder.adjust(2)
     return builder.as_markup()
 
 
-@router.message(Command("admin"))
-async def cmd_admin(message: Message):
-    if not db.is_admin(message.from_user.id):
-        await message.answer("❌ Siz admin emassiz!")
-        return
+def movies_keyboard(genre_id: int):
+    movies = db.get_movies_by_genre(genre_id)
+    builder = InlineKeyboardBuilder()
+    for m in movies:
+        builder.button(text=f"🎥 {m['title']}", callback_data=f"movie:{m['id']}")
+    builder.button(text="⬅️ Orqaga", callback_data="back_genres")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def movie_keyboard(movie: dict):
+    builder = InlineKeyboardBuilder()
+    builder.button(text="▶️ Ko'rish", url=movie["link"])
+    builder.button(text="⬅️ Orqaga", callback_data=f"genre:{movie['genre_id']}")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+async def show_main_menu(message: Message):
     count = db.get_movies_count()
-    users = db.get_users_count()
     await message.answer(
-        f"👨‍💼 <b>Admin Panel</b>\n\nKinolar: <b>{count} ta</b> | Foydalanuvchilar: <b>{users} ta</b>",
-        reply_markup=admin_panel_keyboard()
+        f"🎬 <b>Kino Botga xush kelibsiz!</b>\n\n"
+        f"Bazada hozir <b>{count} ta</b> kino mavjud.\n\n"
+        f"Janrni tanlang yoki qidirish tugmasini bosing 👇",
+        reply_markup=genres_keyboard()
     )
 
 
-@router.callback_query(F.data.startswith("admin:"))
-async def admin_callback(call: CallbackQuery, state: FSMContext):
-    if not db.is_admin(call.from_user.id):
-        await call.answer("❌ Ruxsat yo'q!", show_alert=True)
+# ── /start ─────────────────────────────────────────────
+@router.message(CommandStart())
+async def cmd_start(message: Message, state: FSMContext, bot: Bot):
+    user_id = message.from_user.id
+
+    # Ro'yxatdan o'tganmi?
+    user = db.get_user(user_id)
+
+    if not user:
+        # Yangi foydalanuvchi — telefon so'ra
+        await state.set_state(Registration.phone)
+        await message.answer(
+            "👋 <b>Assalomu alaykum!</b>\n\n"
+            "Botdan foydalanish uchun telefon raqamingizni tasdiqlang 👇",
+            reply_markup=phone_keyboard()
+        )
         return
 
-    action = call.data.split(":")[1]
-
-    if action == "add_movie":
-        await state.set_state(AddMovie.title)
-        await call.message.answer("🎬 Kino nomini kiriting:")
-        await call.answer()
-
-    elif action == "list_movies":
-        movies = db.get_all_movies()
-        if not movies:
-            await call.answer("Hali kino yo'q!", show_alert=True)
-            return
-        builder = InlineKeyboardBuilder()
-        for m in movies:
-            builder.button(text=f"🗑 {m['title']}", callback_data=f"del_movie:{m['id']}")
-        builder.button(text="⬅️ Panel", callback_data="admin:back")
-        builder.adjust(1)
-        await call.message.edit_text(
-            f"📋 <b>Barcha kinolar</b> ({len(movies)} ta)\n\n🗑 O'chirish uchun bosing:",
-            reply_markup=builder.as_markup()
+    # Obunani tekshir
+    subscribed = await check_subscription(bot, user_id)
+    if not subscribed:
+        await message.answer(
+            "❌ <b>MACROICE kanallariga obuna bo'ling:</b>\n\n"
+            "Obuna bo'lgach <b>✅ Obuna bo'ldim!</b> tugmasini bosing.",
+            reply_markup=subscription_keyboard()
         )
-
-    elif action == "add_genre":
-        await state.set_state(AddGenre.name)
-        await call.message.answer("🎭 Yangi janr nomini kiriting:")
-        await call.answer()
-
-    elif action == "list_genres":
-        genres = db.get_genres()
-        builder = InlineKeyboardBuilder()
-        for g in genres:
-            builder.button(text=f"🗑 {g['name']}", callback_data=f"del_genre:{g['id']}")
-        builder.button(text="⬅️ Panel", callback_data="admin:back")
-        builder.adjust(2)
-        await call.message.edit_text(
-            f"📂 <b>Janrlar</b> ({len(genres)} ta)\n\n🗑 O'chirish uchun bosing:",
-            reply_markup=builder.as_markup()
-        )
-
-    elif action == "list_admins":
-        admins = db.get_all_admins()
-        builder = InlineKeyboardBuilder()
-        for a in admins:
-            name = a["username"] or str(a["user_id"])
-            builder.button(text=f"🗑 {name}", callback_data=f"del_admin:{a['user_id']}")
-        builder.button(text="⬅️ Panel", callback_data="admin:back")
-        builder.adjust(1)
-        text = f"👥 <b>Adminlar</b> ({len(admins)} ta)"
-        if not admins:
-            text += "\n\nHozircha qo'shimcha admin yo'q."
-        await call.message.edit_text(text, reply_markup=builder.as_markup())
-
-    elif action == "add_admin":
-        await state.set_state(AddAdmin.user_id)
-        await call.message.answer(
-            "👤 Admin qilmoqchi bo'lgan foydalanuvchining <b>Telegram ID</b> sini kiriting:\n\n"
-            "<i>(ID ni bilish uchun @userinfobot ga /start yuboring)</i>"
-        )
-        await call.answer()
-
-    elif action == "stats":
-        count = db.get_movies_count()
-        users = db.get_users_count()
-        await call.message.edit_text(
-            f"📊 <b>Statistika</b>\n\n"
-            f"🎬 Kinolar: <b>{count} ta</b>\n"
-            f"👥 Foydalanuvchilar: <b>{users} ta</b>",
-            reply_markup=admin_panel_keyboard()
-        )
-
-    elif action == "back":
-        count = db.get_movies_count()
-        users = db.get_users_count()
-        await call.message.edit_text(
-            f"👨‍💼 <b>Admin Panel</b>\n\nKinolar: <b>{count} ta</b> | Foydalanuvchilar: <b>{users} ta</b>",
-            reply_markup=admin_panel_keyboard()
-        )
-
-
-@router.callback_query(F.data.startswith("del_movie:"))
-async def delete_movie(call: CallbackQuery):
-    if not db.is_admin(call.from_user.id):
-        await call.answer("❌ Ruxsat yo'q!", show_alert=True)
         return
+
+    await show_main_menu(message)
+
+
+# ── Telefon qabul qilish ───────────────────────────────
+@router.message(Registration.phone, F.contact)
+async def get_phone(message: Message, state: FSMContext, bot: Bot):
+    contact = message.contact
+    user_id = message.from_user.id
+    phone = contact.phone_number
+    username = message.from_user.username
+    full_name = message.from_user.full_name
+
+    db.add_user(user_id, phone, username, full_name)
+    await state.clear()
+
+    await message.answer(
+        "✅ <b>Telefon raqam tasdiqlandi!</b>",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
+    # Obunani tekshir
+    subscribed = await check_subscription(bot, user_id)
+    if not subscribed:
+        await message.answer(
+            "📢 <b>MACROICE kanallariga obuna bo'ling:</b>\n\n"
+            "Obuna bo'lgach <b>✅ Obuna bo'ldim!</b> tugmasini bosing.",
+            reply_markup=subscription_keyboard()
+        )
+        return
+
+    await show_main_menu(message)
+
+
+@router.message(Registration.phone)
+async def wrong_phone(message: Message):
+    await message.answer(
+        "📱 Iltimos, tugma orqali telefon raqamingizni yuboring:",
+        reply_markup=phone_keyboard()
+    )
+
+
+# ── Obuna tekshirish ───────────────────────────────────
+@router.callback_query(F.data == "check_sub")
+async def check_sub_callback(call: CallbackQuery, bot: Bot):
+    subscribed = await check_subscription(bot, call.from_user.id)
+    if not subscribed:
+        await call.answer(
+            "❌ Siz hali @macroicecinema kanaliga obuna bo'lmadingiz!",
+            show_alert=True
+        )
+        return
+
+    await call.message.delete()
+    await show_main_menu(call.message)
+
+
+# ── Janr tanlandi ──────────────────────────────────────
+@router.callback_query(F.data.startswith("genre:"))
+async def genre_selected(call: CallbackQuery, bot: Bot):
+    if not await check_subscription(bot, call.from_user.id):
+        await call.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
+        return
+
+    genre_id = int(call.data.split(":")[1])
+    movies = db.get_movies_by_genre(genre_id)
+    genre = next((g for g in db.get_genres() if g["id"] == genre_id), None)
+
+    if not movies:
+        await call.answer("Bu janrda hali kino yo'q 😕", show_alert=True)
+        return
+
+    await call.message.edit_text(
+        f"🎬 <b>{genre['name']}</b> — {len(movies)} ta kino\n\nKinoni tanlang:",
+        reply_markup=movies_keyboard(genre_id)
+    )
+
+
+# ── Kino tanlandi ──────────────────────────────────────
+@router.callback_query(F.data.startswith("movie:"))
+async def movie_selected(call: CallbackQuery, bot: Bot):
+    if not await check_subscription(bot, call.from_user.id):
+        await call.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
+        return
+
     movie_id = int(call.data.split(":")[1])
     movie = db.get_movie(movie_id)
-    if movie:
-        db.delete_movie(movie_id)
-        await call.answer(f"✅ '{movie['title']}' o'chirildi!", show_alert=True)
-        movies = db.get_all_movies()
-        builder = InlineKeyboardBuilder()
-        for m in movies:
-            builder.button(text=f"🗑 {m['title']}", callback_data=f"del_movie:{m['id']}")
-        builder.button(text="⬅️ Panel", callback_data="admin:back")
-        builder.adjust(1)
-        if movies:
-            await call.message.edit_text(
-                f"📋 <b>Barcha kinolar</b> ({len(movies)} ta)\n\n🗑 O'chirish uchun bosing:",
-                reply_markup=builder.as_markup()
+
+    if not movie:
+        await call.answer("Kino topilmadi 😕", show_alert=True)
+        return
+
+    text = f"🎬 <b>{movie['title']}</b>\n"
+    if movie["year"]:
+        text += f"📅 Yil: {movie['year']}\n"
+    if movie["genre_name"]:
+        text += f"🎭 Janr: {movie['genre_name']}\n"
+    if movie["description"]:
+        text += f"\n📝 {movie['description']}\n"
+    text += "\n👇 Ko'rish uchun tugmani bosing:"
+
+    kb = movie_keyboard(dict(movie))
+
+    if movie["poster_url"]:
+        try:
+            await call.message.answer_photo(
+                photo=movie["poster_url"],
+                caption=text,
+                reply_markup=kb
             )
-        else:
-            await call.message.edit_text("📋 Hali kino yo'q.", reply_markup=admin_panel_keyboard())
+            await call.message.delete()
+        except Exception:
+            await call.message.edit_text(text, reply_markup=kb)
+    else:
+        await call.message.edit_text(text, reply_markup=kb)
 
 
-@router.callback_query(F.data.startswith("del_genre:"))
-async def delete_genre(call: CallbackQuery):
-    if not db.is_admin(call.from_user.id):
-        await call.answer("❌ Ruxsat yo'q!", show_alert=True)
-        return
-    genre_id = int(call.data.split(":")[1])
-    db.delete_genre(genre_id)
-    await call.answer("✅ Janr o'chirildi!", show_alert=True)
-    genres = db.get_genres()
-    builder = InlineKeyboardBuilder()
-    for g in genres:
-        builder.button(text=f"🗑 {g['name']}", callback_data=f"del_genre:{g['id']}")
-    builder.button(text="⬅️ Panel", callback_data="admin:back")
-    builder.adjust(2)
+# ── Orqaga ─────────────────────────────────────────────
+@router.callback_query(F.data == "back_genres")
+async def back_to_genres(call: CallbackQuery):
+    count = db.get_movies_count()
     await call.message.edit_text(
-        f"📂 <b>Janrlar</b> ({len(genres)} ta)\n\n🗑 O'chirish uchun bosing:",
-        reply_markup=builder.as_markup()
+        f"🎬 <b>Kino Botga xush kelibsiz!</b>\n\n"
+        f"Bazada hozir <b>{count} ta</b> kino mavjud.\n\n"
+        f"Janrni tanlang yoki qidirish tugmasini bosing 👇",
+        reply_markup=genres_keyboard()
     )
 
 
-@router.callback_query(F.data.startswith("del_admin:"))
-async def delete_admin(call: CallbackQuery):
-    if not db.is_admin(call.from_user.id):
-        await call.answer("❌ Ruxsat yo'q!", show_alert=True)
+# ── Qidirish ───────────────────────────────────────────
+@router.callback_query(F.data == "search")
+async def search_prompt(call: CallbackQuery, bot: Bot):
+    if not await check_subscription(bot, call.from_user.id):
+        await call.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
         return
-    user_id = int(call.data.split(":")[1])
-    db.remove_admin(user_id)
-    await call.answer("✅ Admin o'chirildi!", show_alert=True)
-    admins = db.get_all_admins()
-    builder = InlineKeyboardBuilder()
-    for a in admins:
-        name = a["username"] or str(a["user_id"])
-        builder.button(text=f"🗑 {name}", callback_data=f"del_admin:{a['user_id']}")
-    builder.button(text="⬅️ Panel", callback_data="admin:back")
-    builder.adjust(1)
-    await call.message.edit_text(
-        f"👥 <b>Adminlar</b> ({len(admins)} ta)",
-        reply_markup=builder.as_markup()
-    )
-
-
-@router.message(AddMovie.title)
-async def add_movie_title(message: Message, state: FSMContext):
-    await state.update_data(title=message.text.strip())
-    await state.set_state(AddMovie.link)
-    await message.answer("🔗 Kino linkini kiriting (URL yoki Telegram kanal linki):")
-
-
-@router.message(AddMovie.link)
-async def add_movie_link(message: Message, state: FSMContext):
-    await state.update_data(link=message.text.strip())
-    await state.set_state(AddMovie.genre)
-    genres = db.get_genres()
-    builder = InlineKeyboardBuilder()
-    for g in genres:
-        builder.button(text=g["name"], callback_data=f"setgenre:{g['id']}")
-    builder.button(text="⏭ O'tkazib yuborish", callback_data="setgenre:0")
-    builder.adjust(2)
-    await message.answer("🎭 Janrni tanlang:", reply_markup=builder.as_markup())
-
-
-@router.callback_query(F.data.startswith("setgenre:"), AddMovie.genre)
-async def add_movie_genre(call: CallbackQuery, state: FSMContext):
-    genre_id = int(call.data.split(":")[1])
-    await state.update_data(genre_id=genre_id if genre_id != 0 else None)
-    await state.set_state(AddMovie.year)
-    await call.message.answer("📅 Yilini kiriting (masalan: 2024) yoki 0:")
+    await call.message.answer("🔍 Kino nomini yozing:")
     await call.answer()
 
 
-@router.message(AddMovie.year)
-async def add_movie_year(message: Message, state: FSMContext):
-    text = message.text.strip()
-    year = None
-    if text != "0":
-        try:
-            year = int(text)
-        except ValueError:
-            await message.answer("Raqam kiriting yoki 0:")
-            return
-    await state.update_data(year=year)
-    await state.set_state(AddMovie.description)
-    await message.answer("📝 Tavsif kiriting (yoki — deb yozing):")
-
-
-@router.message(AddMovie.description)
-async def add_movie_desc(message: Message, state: FSMContext):
-    desc = message.text.strip()
-    await state.update_data(description=None if desc == "—" else desc)
-    await state.set_state(AddMovie.poster)
-    await message.answer("🖼 Poster URL kiriting (yoki — deb yozing):")
-
-
-@router.message(AddMovie.poster)
-async def add_movie_poster(message: Message, state: FSMContext):
-    poster = message.text.strip()
-    await state.update_data(poster_url=None if poster == "—" else poster)
-    data = await state.get_data()
-    movie_id = db.add_movie(
-        title=data["title"],
-        link=data["link"],
-        genre_id=data.get("genre_id"),
-        description=data.get("description"),
-        poster_url=data.get("poster_url"),
-        year=data.get("year")
-    )
-    await state.clear()
-    await message.answer(
-        f"✅ <b>{data['title']}</b> qo'shildi! (ID: {movie_id})\n\n/admin — panelga qaytish"
-    )
-
-
-@router.message(AddGenre.name)
-async def add_genre_name(message: Message, state: FSMContext):
-    name = message.text.strip()
-    db.add_genre(name)
-    await state.clear()
-    await message.answer(f"✅ <b>{name}</b> janri qo'shildi!\n\n/admin — panelga qaytish")
-
-
-@router.message(AddAdmin.user_id)
-async def add_admin_id(message: Message, state: FSMContext):
-    try:
-        user_id = int(message.text.strip())
-    except ValueError:
-        await message.answer("❌ Noto'g'ri ID. Raqam kiriting:")
+@router.message(F.text & ~F.text.startswith("/"))
+async def handle_text(message: Message, bot: Bot):
+    if not await check_subscription(bot, message.from_user.id):
+        await message.answer(
+            "❌ Botdan foydalanish uchun kanalga obuna bo'ling:",
+            reply_markup=subscription_keyboard()
+        )
         return
-    db.add_admin(user_id)
-    await state.clear()
-    await message.answer(f"✅ {user_id} ID li foydalanuvchi admin qilindi!\n\n/admin — panelga qaytish")
+
+    query = message.text.strip()
+    if len(query) < 2:
+        return
+
+    results = db.search_movies(query)
+    if not results:
+        await message.answer(
+            f"❌ <b>\"{query}\"</b> bo'yicha hech narsa topilmadi.\n\n/kinolar — barcha kinolarni ko'rish"
+        )
+        return
+
+    builder = InlineKeyboardBuilder()
+    for m in results:
+        label = f"🎥 {m['title']}"
+        if m["year"]:
+            label += f" ({m['year']})"
+        builder.button(text=label, callback_data=f"movie:{m['id']}")
+    builder.button(text="⬅️ Bosh sahifa", callback_data="back_genres")
+    builder.adjust(1)
+
+    await message.answer(
+        f"🔍 <b>\"{query}\"</b> bo'yicha {len(results)} ta natija:",
+        reply_markup=builder.as_markup()
+    )
