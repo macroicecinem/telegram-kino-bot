@@ -67,7 +67,11 @@ def movies_keyboard(genre_id: int):
 def movie_keyboard(movie: dict):
     builder = InlineKeyboardBuilder()
     builder.button(text="▶️ Ko'rish", url=movie["link"])
-    builder.button(text="⬅️ Orqaga", callback_data=f"genre:{movie['genre_id']}")
+    genre_id = movie.get("genre_id")
+    if genre_id:
+        builder.button(text="⬅️ Orqaga", callback_data=f"genre:{genre_id}")
+    else:
+        builder.button(text="⬅️ Orqaga", callback_data="back_genres")
     builder.adjust(1)
     return builder.as_markup()
 
