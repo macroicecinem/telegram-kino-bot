@@ -229,18 +229,7 @@ async def movie_selected(call: CallbackQuery, bot: Bot):
 
     kb = movie_keyboard(dict(movie))
 
-    if movie["poster_url"]:
-        try:
-            await call.message.answer_photo(
-                photo=movie["poster_url"],
-                caption=text,
-                reply_markup=kb
-            )
-            await call.message.delete()
-        except Exception:
-            await call.message.edit_text(text, reply_markup=kb)
-    else:
-        await call.message.edit_text(text, reply_markup=kb)
+    await call.message.edit_text(text, reply_markup=kb)
 
 
 # ── Orqaga ─────────────────────────────────────────────
