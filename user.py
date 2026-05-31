@@ -198,10 +198,17 @@ async def genre_selected(call: CallbackQuery, bot: Bot):
         await call.answer("Bu janrda hali kino yo'q 😕", show_alert=True)
         return
 
-    await call.message.edit_text(
-        f"🎬 <b>{genre['name']}</b> — {len(movies)} ta kino\n\nKinoni tanlang:",
-        reply_markup=movies_keyboard(genre_id)
-    )
+    try:
+        await call.message.edit_text(
+            f"🎬 <b>{genre['name']}</b> — {len(movies)} ta kino\n\nKinoni tanlang:",
+            reply_markup=movies_keyboard(genre_id)
+        )
+    except Exception:
+        await call.message.delete()
+        await call.message.answer(
+            f"🎬 <b>{genre['name']}</b> — {len(movies)} ta kino\n\nKinoni tanlang:",
+            reply_markup=movies_keyboard(genre_id)
+        )
 
 
 # ── Kino tanlandi ──────────────────────────────────────
@@ -229,7 +236,18 @@ async def movie_selected(call: CallbackQuery, bot: Bot):
 
     kb = movie_keyboard(dict(movie))
 
-    await call.message.edit_text(text, reply_markup=kb)
+    if movie["poster_url"]:
+        try:
+            await call.message.delete()
+            await call.message.answer_photo(
+                photo=movie["poster_url"],
+                caption=text,
+                reply_markup=kb
+            )
+        except Exception:
+            await call.message.edit_text(text, reply_markup=kb)
+    else:
+        await call.message.edit_text(text, reply_markup=kb)
 
 
 # ── Orqaga ─────────────────────────────────────────────
