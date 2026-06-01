@@ -1,4 +1,4 @@
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -26,6 +26,10 @@ class AddAdmin(StatesGroup):
     user_id = State()
 
 
+class BroadcastState(StatesGroup):
+    message = State()
+
+
 def admin_panel_keyboard():
     builder = InlineKeyboardBuilder()
     builder.button(text="🎬 Kino qo'shish", callback_data="admin:add_movie")
@@ -35,6 +39,7 @@ def admin_panel_keyboard():
     builder.button(text="👥 Adminlar", callback_data="admin:list_admins")
     builder.button(text="➕ Admin qo'shish", callback_data="admin:add_admin")
     builder.button(text="📊 Statistika", callback_data="admin:stats")
+    builder.button(text="📢 Hammaga xabar", callback_data="admin:broadcast")
     builder.adjust(2)
     return builder.as_markup()
 
@@ -128,6 +133,15 @@ async def admin_callback(call: CallbackQuery, state: FSMContext):
             reply_markup=admin_panel_keyboard()
         )
 
+    elif action == "broadcast":
+        await state.set_state(BroadcastState.message)
+        await call.message.answer(
+            "📢 <b>Hammaga xabar yuborish</b>\n\n"
+            "Yuboriladigan xabarni yozing (matn, rasm, video — istalgan format):\n\n"
+            "<i>Bekor qilish uchun /cancel</i>"
+        )
+        await call.answer()
+
     elif action == "back":
         count = db.get_movies_count()
         users = db.get_users_count()
@@ -135,6 +149,34 @@ async def admin_callback(call: CallbackQuery, state: FSMContext):
             f"👨‍💼 <b>Admin Panel</b>\n\nKinolar: <b>{count} ta</b> | Foydalanuvchilar: <b>{users} ta</b>",
             reply_markup=admin_panel_keyboard()
         )
+
+
+@router.message(Command("cancel"), BroadcastState.message)
+async def broadcast_cancel(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("❌ Bekor qilindi.")
+
+
+@router.message(BroadcastState.message)
+async def broadcast_send(message: Message, state: FSMContext, bot: Bot):
+    await state.clear()
+    users = db.get_all_users()
+    success = 0
+    failed = 0
+    status_msg = await message.answer(f"⏳ Yuborilmoqda... 0/{len(users)}")
+    for i, user_id in enumerate(users):
+        try:
+            await bot.copy_message(user_id, message.chat.id, message.message_id)
+            success += 1
+        except Exception:
+            failed += 1
+        if (i + 1) % 20 == 0:
+            await status_msg.edit_text(f"⏳ Yuborilmoqda... {i+1}/{len(users)}")
+    await status_msg.edit_text(
+        f"✅ <b>Yuborish tugadi!</b>\n\n"
+        f"✅ Muvaffaqiyatli: <b>{success} ta</b>\n"
+        f"❌ Xato (bot bloklangan): <b>{failed} ta</b>"
+    )
 
 
 @router.callback_query(F.data.startswith("del_movie:"))
