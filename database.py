@@ -92,6 +92,15 @@ def get_users_count() -> int:
     return row["cnt"]
 
 
+def get_all_users():
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT user_id FROM users")
+    rows = c.fetchall()
+    conn.close()
+    return [row["user_id"] for row in rows]
+
+
 # ── ADMIN ──────────────────────────────────────────────
 def is_admin(user_id: int) -> bool:
     super_admin = os.getenv("SUPER_ADMIN_ID")
