@@ -1,4 +1,4 @@
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -31,6 +31,10 @@ class EditMovie(StatesGroup):
     value = State()
 
 
+class Broadcast(StatesGroup):
+    message = State()
+
+
 def admin_panel_keyboard():
     builder = InlineKeyboardBuilder()
     builder.button(text="🎬 Kino qo'shish", callback_data="admin:add_movie")
@@ -40,6 +44,7 @@ def admin_panel_keyboard():
     builder.button(text="👥 Adminlar", callback_data="admin:list_admins")
     builder.button(text="➕ Admin qo'shish", callback_data="admin:add_admin")
     builder.button(text="📊 Statistika", callback_data="admin:stats")
+    builder.button(text="📢 Hammaga xabar", callback_data="admin:broadcast")
     builder.adjust(2)
     return builder.as_markup()
 
@@ -120,6 +125,14 @@ async def admin_callback(call: CallbackQuery, state: FSMContext):
         await call.message.answer(
             "👤 Admin qilmoqchi bo'lgan foydalanuvchining <b>Telegram ID</b> sini kiriting:\n\n"
             "<i>(ID ni bilish uchun @userinfobot ga /start yuboring)</i>"
+        )
+        await call.answer()
+
+    elif action == "broadcast":
+        await state.set_state(Broadcast.message)
+        await call.message.answer(
+            "📢 Barcha foydalanuvchilarga yuboriladigan xabarni yozing:\n\n"
+            "<i>(Matn, rasm yoki video yuborishingiz mumkin)</i>"
         )
         await call.answer()
 
@@ -394,3 +407,36 @@ async def add_admin_id(message: Message, state: FSMContext):
     db.add_admin(user_id)
     await state.clear()
     await message.answer(f"✅ {user_id} ID li foydalanuvchi admin qilindi!\n\n/admin — panelga qaytish")
+
+
+# ── Broadcast ──────────────────────────────────────────
+@router.message(Broadcast.message)
+async def broadcast_send(message: Message, state: FSMContext, bot: Bot):
+    from aiogram.types import Bot as BotType
+    await state.clear()
+
+    users = db.get_all_users()
+    success = 0
+    failed = 0
+
+    status_msg = await message.answer(f"⏳ Yuborilmoqda... 0/{len(users)}")
+
+    for i, user in enumerate(users):
+        try:
+            await message.copy_to(user["user_id"])
+            success += 1
+        except Exception:
+            failed += 1
+
+        if (i + 1) % 10 == 0:
+            try:
+                await status_msg.edit_text(f"⏳ Yuborilmoqda... {i+1}/{len(users)}")
+            except Exception:
+                pass
+
+    await status_msg.edit_text(
+        f"✅ <b>Xabar yuborildi!</b>\n\n"
+        f"👥 Jami: {len(users)} ta\n"
+        f"✅ Muvaffaqiyatli: {success} ta\n"
+        f"❌ Yetmadi: {failed} ta"
+    )
