@@ -83,6 +83,15 @@ def add_user(user_id: int, phone: str, username: str = None, full_name: str = No
     conn.close()
 
 
+def get_all_users():
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM users")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
 def get_users_count() -> int:
     conn = get_conn()
     c = conn.cursor()
@@ -90,15 +99,6 @@ def get_users_count() -> int:
     row = c.fetchone()
     conn.close()
     return row["cnt"]
-
-
-def get_all_users():
-    conn = get_conn()
-    c = conn.cursor()
-    c.execute("SELECT user_id FROM users")
-    rows = c.fetchall()
-    conn.close()
-    return [row["user_id"] for row in rows]
 
 
 # ── ADMIN ──────────────────────────────────────────────
