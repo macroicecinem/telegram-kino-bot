@@ -412,7 +412,6 @@ async def add_admin_id(message: Message, state: FSMContext):
 # ── Broadcast ──────────────────────────────────────────
 @router.message(Broadcast.message)
 async def broadcast_send(message: Message, state: FSMContext, bot: Bot):
-    from aiogram.types import Bot as BotType
     await state.clear()
 
     users = db.get_all_users()
