@@ -226,10 +226,19 @@ async def movie_selected(call: CallbackQuery, bot: Bot):
         return
 
     text = f"🎬 <b>{movie['title']}</b>\n"
+    text += "—————————————————\n"
+    if movie["country"]:
+        text += f"🌍 Davlat: {movie['country']}\n"
     if movie["year"]:
         text += f"📅 Yil: {movie['year']}\n"
+    if movie["quality"]:
+        text += f"🎬 Sifat: {movie['quality']}\n"
+    if movie["language"]:
+        text += f"🗣 Til: {movie['language']}\n"
     if movie["genre_name"]:
         text += f"🎭 Janr: {movie['genre_name']}\n"
+    if movie["code"]:
+        text += f"🔢 Film kodi: {movie['code']}\n"
     if movie["description"]:
         text += f"\n📝 {movie['description']}\n"
     text += "\n👇 Ko'rish uchun tugmani bosing:"
