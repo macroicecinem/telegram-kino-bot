@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import InlineQuery, InlineQueryResultArticle, InputTextMessageContent, InlineQueryResultPhoto
+from aiogram.types import InlineQuery, InlineQueryResultArticle, InputTextMessageContent
 import hashlib
 
 import database as db
@@ -84,26 +84,11 @@ async def main():
 
             result_id = hashlib.md5(str(movie["id"]).encode()).hexdigest()
 
-            if movie.get("poster_url"):
-                try:
-                    result = InlineQueryResultPhoto(
-                        id=result_id,
-                        photo_url=movie["poster_url"],
-                        thumbnail_url=movie["poster_url"],
-                        title=movie["title"],
-                        description=description,
-                        caption=text_msg,
-                        parse_mode="HTML"
-                    )
-                    results.append(result)
-                    continue
-                except Exception:
-                    pass
-
             result = InlineQueryResultArticle(
                 id=result_id,
                 title=movie["title"],
                 description=description,
+                thumbnail_url=movie.get("poster_url") or None,
                 input_message_content=InputTextMessageContent(
                     message_text=text_msg,
                     parse_mode="HTML"
