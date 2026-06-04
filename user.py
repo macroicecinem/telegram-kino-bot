@@ -51,7 +51,7 @@ def phone_keyboard():
 def main_keyboard():
     builder = InlineKeyboardBuilder()
     builder.button(text="🎬 Barcha filmlar", callback_data="all_movies")
-    builder.button(text="🔍 Qidirish", callback_data="search")
+    builder.button(text="🔍 Qidirish", switch_inline_query_current_chat="")
     builder.button(text="📂 Filter", callback_data="filter_menu")
     builder.button(text="⭐️ Saqlangan", callback_data="saved_movies")
     builder.adjust(2)
