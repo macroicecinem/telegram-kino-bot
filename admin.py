@@ -13,9 +13,13 @@ class AddMovie(StatesGroup):
     title = State()
     link = State()
     genre = State()
+    year = State()
+    country = State()
+    quality = State()
+    language = State()
+    code = State()
     description = State()
     poster = State()
-    year = State()
 
 
 class AddGenre(StatesGroup):
@@ -170,6 +174,10 @@ async def movie_actions(call: CallbackQuery):
     builder.button(text="✏️ Nomini o'zgartir", callback_data=f"edit_movie:{movie_id}:title")
     builder.button(text="🔗 Linkni o'zgartir", callback_data=f"edit_movie:{movie_id}:link")
     builder.button(text="📅 Yilni o'zgartir", callback_data=f"edit_movie:{movie_id}:year")
+    builder.button(text="🌍 Davlatni o'zgartir", callback_data=f"edit_movie:{movie_id}:country")
+    builder.button(text="🎬 Sifatni o'zgartir", callback_data=f"edit_movie:{movie_id}:quality")
+    builder.button(text="🗣 Tilni o'zgartir", callback_data=f"edit_movie:{movie_id}:language")
+    builder.button(text="🔢 Kodni o'zgartir", callback_data=f"edit_movie:{movie_id}:code")
     builder.button(text="📝 Tavsifni o'zgartir", callback_data=f"edit_movie:{movie_id}:description")
     builder.button(text="🖼 Posterni o'zgartir", callback_data=f"edit_movie:{movie_id}:poster_url")
     builder.button(text="🗑 O'chirish", callback_data=f"del_movie:{movie_id}")
@@ -200,7 +208,11 @@ async def edit_movie_start(call: CallbackQuery, state: FSMContext):
         "link": "yangi linkini",
         "year": "yangi yilini (masalan: 2024)",
         "description": "yangi tavsifini (o'chirish uchun — yozing)",
-        "poster_url": "yangi poster URL ni (o'chirish uchun — yozing)"
+        "poster_url": "yangi poster URL ni (o'chirish uchun — yozing)",
+        "country": "yangi davlatini (o'chirish uchun — yozing)",
+        "quality": "yangi sifatini (masalan: 1080p)",
+        "language": "yangi tilini",
+        "code": "yangi kodini"
     }
 
     await state.set_state(EditMovie.value)
@@ -358,6 +370,38 @@ async def add_movie_year(message: Message, state: FSMContext):
             await message.answer("Raqam kiriting yoki 0:")
             return
     await state.update_data(year=year)
+    await state.set_state(AddMovie.country)
+    await message.answer("🌍 Davlatini kiriting (masalan: USA, O'zbekiston) yoki — :")
+
+
+@router.message(AddMovie.country)
+async def add_movie_country(message: Message, state: FSMContext):
+    val = message.text.strip()
+    await state.update_data(country=None if val == "—" else val)
+    await state.set_state(AddMovie.quality)
+    await message.answer("🎬 Sifatini kiriting (masalan: 1080p, 720p) yoki — :")
+
+
+@router.message(AddMovie.quality)
+async def add_movie_quality(message: Message, state: FSMContext):
+    val = message.text.strip()
+    await state.update_data(quality=None if val == "—" else val)
+    await state.set_state(AddMovie.language)
+    await message.answer("🗣 Tilini kiriting (masalan: O'zbek tilida) yoki — :")
+
+
+@router.message(AddMovie.language)
+async def add_movie_language(message: Message, state: FSMContext):
+    val = message.text.strip()
+    await state.update_data(language=None if val == "—" else val)
+    await state.set_state(AddMovie.code)
+    await message.answer("🔢 Film kodini kiriting (masalan: 911) yoki — :")
+
+
+@router.message(AddMovie.code)
+async def add_movie_code(message: Message, state: FSMContext):
+    val = message.text.strip()
+    await state.update_data(code=None if val == "—" else val)
     await state.set_state(AddMovie.description)
     await message.answer("📝 Tavsif kiriting (yoki — deb yozing):")
 
@@ -381,7 +425,11 @@ async def add_movie_poster(message: Message, state: FSMContext):
         genre_id=data.get("genre_id"),
         description=data.get("description"),
         poster_url=data.get("poster_url"),
-        year=data.get("year")
+        year=data.get("year"),
+        country=data.get("country"),
+        quality=data.get("quality"),
+        language=data.get("language"),
+        code=data.get("code")
     )
     await state.clear()
     await message.answer(
