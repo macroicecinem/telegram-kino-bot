@@ -58,6 +58,16 @@ def init_db():
         )
     """)
 
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS saved_movies (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            movie_id INTEGER NOT NULL,
+            saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, movie_id)
+        )
+    """)
+
     # Yangi ustunlar qo'shish (agar mavjud bo'lmasa)
     for col, coltype in [("country", "TEXT"), ("quality", "TEXT"), ("language", "TEXT"), ("code", "TEXT")]:
         try:
@@ -258,3 +268,101 @@ def get_movies_count() -> int:
     row = c.fetchone()
     conn.close()
     return row["cnt"]
+
+
+# ── SAVED MOVIES ───────────────────────────────────────
+def save_movie(user_id: int, movie_id: int) -> bool:
+    try:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("INSERT INTO saved_movies (user_id, movie_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (user_id, movie_id))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def unsave_movie(user_id: int, movie_id: int) -> bool:
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("DELETE FROM saved_movies WHERE user_id=%s AND movie_id=%s", (user_id, movie_id))
+    conn.commit()
+    conn.close()
+    return True
+
+
+def is_saved(user_id: int, movie_id: int) -> bool:
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT id FROM saved_movies WHERE user_id=%s AND movie_id=%s", (user_id, movie_id))
+    row = c.fetchone()
+    conn.close()
+    return row is not None
+
+
+def get_saved_movies(user_id: int):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("""
+        SELECT m.*, g.name as genre_name 
+        FROM saved_movies s
+        JOIN movies m ON s.movie_id = m.id
+        LEFT JOIN genres g ON m.genre_id = g.id
+        WHERE s.user_id = %s
+        ORDER BY s.saved_at DESC
+    """, (user_id,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+def get_movies_by_filter(genre_id=None, country=None, year=None, quality=None):
+    conn = get_conn()
+    c = conn.cursor()
+    query = "SELECT m.*, g.name as genre_name FROM movies m LEFT JOIN genres g ON m.genre_id=g.id WHERE 1=1"
+    params = []
+    if genre_id:
+        query += " AND m.genre_id=%s"
+        params.append(genre_id)
+    if country:
+        query += " AND m.country ILIKE %s"
+        params.append(f"%{country}%")
+    if year:
+        query += " AND m.year=%s"
+        params.append(year)
+    if quality:
+        query += " AND m.quality ILIKE %s"
+        params.append(f"%{quality}%")
+    query += " ORDER BY m.title"
+    c.execute(query, params)
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+def get_distinct_countries():
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT country FROM movies WHERE country IS NOT NULL ORDER BY country")
+    rows = c.fetchall()
+    conn.close()
+    return [r["country"] for r in rows]
+
+
+def get_distinct_years():
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT year FROM movies WHERE year IS NOT NULL ORDER BY year DESC")
+    rows = c.fetchall()
+    conn.close()
+    return [r["year"] for r in rows]
+
+
+def get_distinct_qualities():
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT quality FROM movies WHERE quality IS NOT NULL ORDER BY quality")
+    rows = c.fetchall()
+    conn.close()
+    return [r["quality"] for r in rows]
