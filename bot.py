@@ -47,10 +47,11 @@ async def main():
         if len(text) >= 1:
             movies = db.search_movies(text)
         else:
-            movies = db.get_all_movies()[:20]
+            movies = db.get_all_movies()
 
-        for movie in movies[:20]:
-            movie = dict(movie)
+        results_list = [dict(m) for m in movies][:20]
+
+        for movie in results_list:
 
             # Kartochka matni
             desc_parts = []
@@ -78,7 +79,8 @@ async def main():
                 text_msg += f"🎭 Janr: {movie['genre_name']}\n"
             if movie.get("description"):
                 text_msg += f"\n📝 {movie['description']}\n"
-            text_msg += f"\n▶️ <a href='{movie['link']}'>Ko'rish</a>"
+            if movie.get("link"):
+                text_msg += f"\n▶️ <a href=\"{movie['link']}\">Ko'rish</a>"
 
             result_id = hashlib.md5(str(movie["id"]).encode()).hexdigest()
 
