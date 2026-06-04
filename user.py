@@ -112,6 +112,8 @@ def movie_card_text(movie):
         text += f"🎭 Janr: {movie['genre_name']}\n"
     if movie.get("code"):
         text += f"🔢 Film kodi: {movie['code']}\n"
+    if movie.get("views"):
+        text += f"👁 Ko'rishlar: {movie['views']}\n"
     if movie.get("description"):
         text += f"\n📝 {movie['description']}\n"
     text += "\n👇 Ko'rish uchun tugmani bosing:"
@@ -276,6 +278,7 @@ async def movie_selected(call: CallbackQuery, bot: Bot):
         await call.answer("Kino topilmadi 😕", show_alert=True)
         return
 
+    db.increment_views(movie_id)
     text = movie_card_text(dict(movie))
     kb = movie_keyboard(dict(movie), call.from_user.id)
 
