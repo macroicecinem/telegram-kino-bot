@@ -67,9 +67,10 @@ def init_db():
             UNIQUE(user_id, movie_id)
         )
     """)
+    conn.commit()
 
     # Yangi ustunlar qo'shish (agar mavjud bo'lmasa)
-    for col, coltype in [("country", "TEXT"), ("quality", "TEXT"), ("language", "TEXT"), ("code", "TEXT")]:
+    for col, coltype in [("country", "TEXT"), ("quality", "TEXT"), ("language", "TEXT"), ("code", "TEXT"), ("views", "INTEGER DEFAULT 0")]:
         try:
             c.execute(f"ALTER TABLE movies ADD COLUMN {col} {coltype}")
             conn.commit()
@@ -366,3 +367,26 @@ def get_distinct_qualities():
     rows = c.fetchall()
     conn.close()
     return [r["quality"] for r in rows]
+
+
+def increment_views(movie_id: int):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("UPDATE movies SET views = COALESCE(views, 0) + 1 WHERE id=%s", (movie_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_top_movies(limit: int = 10):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("""
+        SELECT m.*, g.name as genre_name 
+        FROM movies m 
+        LEFT JOIN genres g ON m.genre_id=g.id 
+        ORDER BY COALESCE(m.views, 0) DESC 
+        LIMIT %s
+    """, (limit,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
