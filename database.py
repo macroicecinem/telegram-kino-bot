@@ -39,6 +39,10 @@ def init_db():
             link TEXT NOT NULL,
             genre_id INTEGER REFERENCES genres(id) ON DELETE SET NULL,
             year INTEGER,
+            country TEXT,
+            quality TEXT,
+            language TEXT,
+            code TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -53,6 +57,13 @@ def init_db():
             registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    # Yangi ustunlar qo'shish (agar mavjud bo'lmasa)
+    for col, coltype in [("country", "TEXT"), ("quality", "TEXT"), ("language", "TEXT"), ("code", "TEXT")]:
+        try:
+            c.execute(f"ALTER TABLE movies ADD COLUMN {col} {coltype}")
+        except Exception:
+            pass
 
     default_genres = ["Fantastika", "Drama", "Komediya", "Qo'rqinchli"]
     for g in default_genres:
@@ -173,12 +184,12 @@ def delete_genre(genre_id: int):
 
 
 # ── MOVIE ──────────────────────────────────────────────
-def add_movie(title, link, genre_id=None, description=None, poster_url=None, year=None) -> int:
+def add_movie(title, link, genre_id=None, description=None, poster_url=None, year=None, country=None, quality=None, language=None, code=None) -> int:
     conn = get_conn()
     c = conn.cursor()
     c.execute(
-        "INSERT INTO movies (title, link, genre_id, description, poster_url, year) VALUES (%s,%s,%s,%s,%s,%s) RETURNING id",
-        (title, link, genre_id, description, poster_url, year)
+        "INSERT INTO movies (title, link, genre_id, description, poster_url, year, country, quality, language, code) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+        (title, link, genre_id, description, poster_url, year, country, quality, language, code)
     )
     row = c.fetchone()
     conn.commit()
