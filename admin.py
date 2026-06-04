@@ -143,12 +143,19 @@ async def admin_callback(call: CallbackQuery, state: FSMContext):
     elif action == "stats":
         count = db.get_movies_count()
         users = db.get_users_count()
-        await call.message.edit_text(
+        top_movies = db.get_top_movies(5)
+
+        text = (
             f"📊 <b>Statistika</b>\n\n"
             f"🎬 Kinolar: <b>{count} ta</b>\n"
-            f"👥 Foydalanuvchilar: <b>{users} ta</b>",
-            reply_markup=admin_panel_keyboard()
+            f"👥 Foydalanuvchilar: <b>{users} ta</b>\n\n"
+            f"🏆 <b>Top 5 ko'rilgan kinolar:</b>\n"
         )
+        for i, m in enumerate(top_movies, 1):
+            views = m.get("views") or 0
+            text += f"{i}. {m['title']} — <b>{views} ko'rish</b>\n"
+
+        await call.message.edit_text(text, reply_markup=admin_panel_keyboard())
 
     elif action == "back":
         count = db.get_movies_count()
