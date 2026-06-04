@@ -62,8 +62,9 @@ def init_db():
     for col, coltype in [("country", "TEXT"), ("quality", "TEXT"), ("language", "TEXT"), ("code", "TEXT")]:
         try:
             c.execute(f"ALTER TABLE movies ADD COLUMN {col} {coltype}")
+            conn.commit()
         except Exception:
-            pass
+            conn.rollback()
 
     default_genres = ["Fantastika", "Drama", "Komediya", "Qo'rqinchli"]
     for g in default_genres:
