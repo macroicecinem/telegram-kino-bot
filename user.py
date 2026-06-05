@@ -120,14 +120,25 @@ def movie_card_text(movie):
     return text
 
 
+BANNER_GIF = "CgACAgIAAxkBAAIxC2oiuTuJXS1LQbV2EnOXz64qhIzJAAKWoQACWfYZSa2rlxDma_1cOwQ"
+
 async def show_main_menu(message: Message):
     count = db.get_movies_count()
-    await message.answer(
+    text = (
         f"🎬 <b>MACROICE Cinema botiga xush kelibsiz!</b>\n\n"
-        f"Bazada hozir <b>{count} ta</b> kino mavjud.\n\n"
-        f"Quyidagilardan birini tanlang 👇",
-        reply_markup=main_keyboard()
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"🍿 Bazada: <b>{count} ta</b> kino\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"Quyidagilardan birini tanlang 👇"
     )
+    try:
+        await message.answer_animation(
+            animation=BANNER_GIF,
+            caption=text,
+            reply_markup=main_keyboard()
+        )
+    except Exception:
+        await message.answer(text, reply_markup=main_keyboard())
 
 
 # ── /start ─────────────────────────────────────────────
@@ -206,21 +217,26 @@ async def check_sub_callback(call: CallbackQuery, bot: Bot):
 @router.callback_query(F.data == "back_main")
 async def back_main(call: CallbackQuery):
     count = db.get_movies_count()
+    text = (
+        f"🎬 <b>MACROICE Cinema botiga xush kelibsiz!</b>\n\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"🍿 Bazada: <b>{count} ta</b> kino\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"Quyidagilardan birini tanlang 👇"
+    )
     try:
-        await call.message.edit_text(
-            f"🎬 <b>MACROICE Cinema botiga xush kelibsiz!</b>\n\n"
-            f"Bazada hozir <b>{count} ta</b> kino mavjud.\n\n"
-            f"Quyidagilardan birini tanlang 👇",
+        await call.message.delete()
+        await call.message.answer_animation(
+            animation=BANNER_GIF,
+            caption=text,
             reply_markup=main_keyboard()
         )
     except Exception:
-        await call.message.delete()
-        await call.message.answer(
-            f"🎬 <b>MACROICE Cinema botiga xush kelibsiz!</b>\n\n"
-            f"Bazada hozir <b>{count} ta</b> kino mavjud.\n\n"
-            f"Quyidagilardan birini tanlang 👇",
-            reply_markup=main_keyboard()
-        )
+        try:
+            await call.message.edit_text(text, reply_markup=main_keyboard())
+        except Exception:
+            await call.message.delete()
+            await call.message.answer(text, reply_markup=main_keyboard())
 
 
 # ── Barcha filmlar (janrlar) ───────────────────────────
