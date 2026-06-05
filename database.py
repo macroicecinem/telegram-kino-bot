@@ -390,3 +390,15 @@ def get_top_movies(limit: int = 10):
     rows = c.fetchall()
     conn.close()
     return rows
+
+
+def get_movie_by_code(code: str):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        "SELECT m.*, g.name as genre_name FROM movies m LEFT JOIN genres g ON m.genre_id=g.id WHERE m.code=%s",
+        (code.strip(),)
+    )
+    row = c.fetchone()
+    conn.close()
+    return row
