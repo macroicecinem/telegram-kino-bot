@@ -98,6 +98,22 @@ async def main():
 
         await query.answer(results, cache_time=10, is_personal=True)
 
+    # Vaqtinchalik: file_id olish uchun
+    @dp.message(F.animation)
+    async def get_animation_id(message):
+        if str(message.from_user.id) == os.getenv("SUPER_ADMIN_ID", ""):
+            await message.answer(f"GIF file_id:\n<code>{message.animation.file_id}</code>")
+
+    @dp.message(F.video)
+    async def get_video_id(message):
+        if str(message.from_user.id) == os.getenv("SUPER_ADMIN_ID", ""):
+            await message.answer(f"Video file_id:\n<code>{message.video.file_id}</code>")
+
+    @dp.message(F.document)
+    async def get_doc_id(message):
+        if str(message.from_user.id) == os.getenv("SUPER_ADMIN_ID", ""):
+            await message.answer(f"Document file_id:\n<code>{message.document.file_id}</code>")
+
     dp.include_router(admin.router)
     dp.include_router(user.router)
 
