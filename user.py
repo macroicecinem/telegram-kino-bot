@@ -158,11 +158,25 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
 
     subscribed = await check_subscription(bot, user_id)
     if not subscribed:
-        await message.answer(
-            "❌ <b>MACROICE kanallariga obuna bo'ling:</b>\n\n"
-            "Obuna bo'lgach <b>✅ Obuna bo'ldim!</b> tugmasini bosing.",
-            reply_markup=subscription_keyboard()
-        )
+        try:
+            await message.answer_animation(
+                animation=BANNER_GIF,
+                caption=(
+                    "🎬 <b>MACROICE Cinema</b>\n\n"
+                    "━━━━━━━━━━━━━━━━━━\n"
+                    "❌ Botdan foydalanish uchun\n"
+                    "<b>MACROICE kanallariga obuna bo'ling!</b>\n"
+                    "━━━━━━━━━━━━━━━━━━\n\n"
+                    "Obuna bo'lgach <b>✅ Obuna bo'ldim!</b> bosing."
+                ),
+                reply_markup=subscription_keyboard()
+            )
+        except Exception:
+            await message.answer(
+                "❌ <b>MACROICE kanallariga obuna bo'ling:</b>\n\n"
+                "Obuna bo'lgach <b>✅ Obuna bo'ldim!</b> tugmasini bosing.",
+                reply_markup=subscription_keyboard()
+            )
         return
 
     await show_main_menu(message)
@@ -188,11 +202,25 @@ async def get_phone(message: Message, state: FSMContext, bot: Bot):
 
     subscribed = await check_subscription(bot, user_id)
     if not subscribed:
-        await message.answer(
-            "📢 <b>MACROICE kanallariga obuna bo'ling:</b>\n\n"
-            "Obuna bo'lgach <b>✅ Obuna bo'ldim!</b> tugmasini bosing.",
-            reply_markup=subscription_keyboard()
-        )
+        try:
+            await message.answer_animation(
+                animation=BANNER_GIF,
+                caption=(
+                    "🎬 <b>MACROICE Cinema</b>\n\n"
+                    "━━━━━━━━━━━━━━━━━━\n"
+                    "❌ Botdan foydalanish uchun\n"
+                    "<b>MACROICE kanallariga obuna bo'ling!</b>\n"
+                    "━━━━━━━━━━━━━━━━━━\n\n"
+                    "Obuna bo'lgach <b>✅ Obuna bo'ldim!</b> bosing."
+                ),
+                reply_markup=subscription_keyboard()
+            )
+        except Exception:
+            await message.answer(
+                "📢 <b>MACROICE kanallariga obuna bo'ling:</b>\n\n"
+                "Obuna bo'lgach <b>✅ Obuna bo'ldim!</b> tugmasini bosing.",
+                reply_markup=subscription_keyboard()
+            )
         return
     await show_main_menu(message)
 
