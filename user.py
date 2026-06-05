@@ -557,13 +557,34 @@ async def handle_text(message: Message, bot: Bot):
         return
 
     query = message.text.strip()
+    if len(query) < 1:
+        return
+
+    # Avval kod bo'yicha qidiruv
+    movie_by_code = db.get_movie_by_code(query)
+    if movie_by_code:
+        movie = dict(movie_by_code)
+        db.increment_views(movie["id"])
+        text = movie_card_text(movie)
+        kb = movie_keyboard(movie, message.from_user.id)
+        if movie.get("poster_url"):
+            try:
+                await message.answer_photo(photo=movie["poster_url"], caption=text, reply_markup=kb)
+            except Exception:
+                await message.answer(text, reply_markup=kb)
+        else:
+            await message.answer(text, reply_markup=kb)
+        return
+
+    # Nom bo'yicha qidiruv
     if len(query) < 2:
         return
 
     results = db.search_movies(query)
     if not results:
         await message.answer(
-            f"❌ <b>\"{query}\"</b> bo'yicha hech narsa topilmadi."
+            f"❌ <b>\"{query}\"</b> bo'yicha hech narsa topilmadi.\n\n"
+            f"🔢 Kino kodini ham sinab ko'ring!"
         )
         return
 
