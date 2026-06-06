@@ -340,6 +340,12 @@ async def movie_selected(call: CallbackQuery, bot: Bot):
                 await call.message.delete()
                 await call.message.answer(info_text, reply_markup=kb)
 
+            # Avval info xabarini o'chiramiz
+            try:
+                await call.message.delete()
+            except Exception:
+                pass
+
             # Kanaldan forward qilish
             channel = movie["channel_username"]
             if not channel.startswith("@"):
@@ -350,8 +356,18 @@ async def movie_selected(call: CallbackQuery, bot: Bot):
                 message_id=movie["channel_post_id"]
             )
 
-            # Forward xabar ID ni saqlaymiz (orqaga bosganda o'chirish uchun)
+            # Orqaga tugmasi
+            builder = InlineKeyboardBuilder()
+            genre_id = movie.get("genre_id") or 0
+            builder.button(text="⬅️ Orqaga", callback_data=f"back_movie:{movie_id}:{genre_id}")
+            back_msg = await call.message.answer(
+                "👆 Film yuqorida",
+                reply_markup=builder.as_markup()
+            )
+
+            # Ikkala xabar ID ni saqlaymiz
             db.save_forward_message(call.from_user.id, movie_id, forwarded.message_id)
+            db.save_forward_message(call.from_user.id, movie_id, back_msg.message_id)
             return
         except Exception as e:
             pass
