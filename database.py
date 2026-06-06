@@ -59,6 +59,15 @@ def init_db():
     """)
 
     c.execute("""
+        CREATE TABLE IF NOT EXISTS sagas (
+            id SERIAL PRIMARY KEY,
+            genre_id INTEGER REFERENCES genres(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            sort_order INTEGER DEFAULT 0
+        )
+    """)
+
+    c.execute("""
         CREATE TABLE IF NOT EXISTS saved_movies (
             id SERIAL PRIMARY KEY,
             user_id BIGINT NOT NULL,
@@ -70,7 +79,7 @@ def init_db():
     conn.commit()
 
     # Yangi ustunlar qo'shish (agar mavjud bo'lmasa)
-    for col, coltype in [("country", "TEXT"), ("quality", "TEXT"), ("language", "TEXT"), ("code", "TEXT"), ("views", "INTEGER DEFAULT 0"), ("channel_post_id", "BIGINT"), ("channel_username", "TEXT")]:
+    for col, coltype in [("country", "TEXT"), ("quality", "TEXT"), ("language", "TEXT"), ("code", "TEXT"), ("views", "INTEGER DEFAULT 0"), ("channel_post_id", "BIGINT"), ("channel_username", "TEXT"), ("saga", "TEXT")]:
         try:
             c.execute(f"ALTER TABLE movies ADD COLUMN {col} {coltype}")
             conn.commit()
@@ -255,7 +264,7 @@ def search_movies(query: str):
 
 
 def update_movie(movie_id: int, **kwargs):
-    allowed = {"title", "link", "genre_id", "description", "poster_url", "year", "country", "quality", "language", "code", "channel_username", "channel_post_id"}
+    allowed = {"title", "link", "genre_id", "description", "poster_url", "year", "country", "quality", "language", "code", "channel_username", "channel_post_id", "saga"}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return
@@ -467,3 +476,55 @@ def delete_forward_messages(user_id: int, movie_id: int):
     )
     conn.commit()
     conn.close()
+
+
+# ── SAGAS ──────────────────────────────────────────────
+def get_sagas_by_genre(genre_id: int):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM sagas WHERE genre_id=%s ORDER BY sort_order", (genre_id,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+def add_saga(genre_id: int, name: str, sort_order: int = 0) -> int:
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("INSERT INTO sagas (genre_id, name, sort_order) VALUES (%s, %s, %s) RETURNING id", (genre_id, name, sort_order))
+    row = c.fetchone()
+    conn.commit()
+    conn.close()
+    return row["id"]
+
+
+def delete_saga(saga_id: int):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("DELETE FROM sagas WHERE id=%s", (saga_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_movies_by_saga(saga_name: str, genre_id: int):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        "SELECT m.*, g.name as genre_name FROM movies m LEFT JOIN genres g ON m.genre_id=g.id WHERE m.saga=%s AND m.genre_id=%s ORDER BY CAST(m.code AS INTEGER) NULLS LAST",
+        (saga_name, genre_id)
+    )
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+def get_movies_without_saga(genre_id: int):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        "SELECT m.*, g.name as genre_name FROM movies m LEFT JOIN genres g ON m.genre_id=g.id WHERE m.genre_id=%s AND (m.saga IS NULL OR m.saga='') ORDER BY CAST(m.code AS INTEGER) NULLS LAST",
+        (genre_id,)
+    )
+    rows = c.fetchall()
+    conn.close()
+    return rows
