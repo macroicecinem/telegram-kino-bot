@@ -80,9 +80,11 @@ def movies_keyboard(movies, back_callback="back_genres_main"):
     return builder.as_markup()
 
 
-def movie_keyboard(movie: dict, user_id: int):
+def movie_keyboard(movie: dict, user_id: int, has_forward: bool = False):
     builder = InlineKeyboardBuilder()
-    builder.button(text="▶️ Ko'rish", url=movie["link"])
+    # Forward bo'lsa Ko'rish tugmasi kerak emas
+    if not has_forward and movie.get("link"):
+        builder.button(text="▶️ Ko'rish", url=movie["link"])
     saved = db.is_saved(user_id, movie["id"])
     if saved:
         builder.button(text="❌ Saqlangandan o'chir", callback_data=f"unsave:{movie['id']}")
@@ -90,9 +92,9 @@ def movie_keyboard(movie: dict, user_id: int):
         builder.button(text="⭐️ Saqlash", callback_data=f"save:{movie['id']}")
     genre_id = movie.get("genre_id")
     if genre_id:
-        builder.button(text="⬅️ Orqaga", callback_data=f"genre:{genre_id}")
+        builder.button(text="⬅️ Orqaga", callback_data=f"back_movie:{movie['id']}:{genre_id}")
     else:
-        builder.button(text="⬅️ Orqaga", callback_data="back_main")
+        builder.button(text="⬅️ Orqaga", callback_data=f"back_movie:{movie['id']}:0")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -323,10 +325,42 @@ async def movie_selected(call: CallbackQuery, bot: Bot):
         return
 
     db.increment_views(movie_id)
-    text = movie_card_text(dict(movie))
-    kb = movie_keyboard(dict(movie), call.from_user.id)
+    movie = dict(movie)
 
-    if movie["poster_url"]:
+    # Kanal post ID orqali forward qilish
+    if movie.get("channel_post_id") and movie.get("channel_username"):
+        try:
+            # Info xabarini yuborish
+            kb = movie_keyboard(movie, call.from_user.id)
+            info_text = movie_card_text(movie)
+
+            try:
+                await call.message.edit_text(info_text, reply_markup=kb)
+            except Exception:
+                await call.message.delete()
+                await call.message.answer(info_text, reply_markup=kb)
+
+            # Kanaldan forward qilish
+            channel = movie["channel_username"]
+            if not channel.startswith("@"):
+                channel = "@" + channel
+            forwarded = await bot.forward_message(
+                chat_id=call.from_user.id,
+                from_chat_id=channel,
+                message_id=movie["channel_post_id"]
+            )
+
+            # Forward xabar ID ni saqlaymiz (orqaga bosganda o'chirish uchun)
+            db.save_forward_message(call.from_user.id, movie_id, forwarded.message_id)
+            return
+        except Exception as e:
+            pass
+
+    # Eski usul - link bilan
+    text = movie_card_text(movie)
+    kb = movie_keyboard(movie, call.from_user.id)
+
+    if movie.get("poster_url"):
         try:
             await call.message.delete()
             await call.message.answer_photo(photo=movie["poster_url"], caption=text, reply_markup=kb)
@@ -343,6 +377,58 @@ async def movie_selected(call: CallbackQuery, bot: Bot):
             await call.message.delete()
             await call.message.answer(text, reply_markup=kb)
 
+
+
+
+# ── Orqaga (forward o'chirish) ─────────────────────────
+@router.callback_query(F.data.startswith("back_movie:"))
+async def back_from_movie(call: CallbackQuery, bot: Bot):
+    parts = call.data.split(":")
+    movie_id = int(parts[1])
+    genre_id = int(parts[2])
+
+    # Forward xabarlarni o'chirish
+    forward_ids = db.get_forward_messages(call.from_user.id, movie_id)
+    for msg_id in forward_ids:
+        try:
+            await bot.delete_message(call.from_user.id, msg_id)
+        except Exception:
+            pass
+    db.delete_forward_messages(call.from_user.id, movie_id)
+
+    # Orqaga qaytish
+    if genre_id and genre_id != 0:
+        movies = db.get_movies_by_genre(genre_id)
+        genre = next((g for g in db.get_genres() if g["id"] == genre_id), None)
+        try:
+            await call.message.edit_text(
+                f"🎬 <b>{genre['name']}</b> — {len(movies)} ta kino\n\nKinoni tanlang:",
+                reply_markup=movies_keyboard(movies, back_callback="all_movies")
+            )
+        except Exception:
+            await call.message.delete()
+            await call.message.answer(
+                f"🎬 <b>{genre['name']}</b> — {len(movies)} ta kino\n\nKinoni tanlang:",
+                reply_markup=movies_keyboard(movies, back_callback="all_movies")
+            )
+    else:
+        count = db.get_movies_count()
+        text = (
+            f"🎬 <b>MACROICE Cinema botiga xush kelibsiz!</b>\n\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"🍿 Bazada: <b>{count} ta</b> kino\n"
+            f"━━━━━━━━━━━━━━━━━━\n\n"
+            f"Quyidagilardan birini tanlang 👇"
+        )
+        try:
+            await call.message.delete()
+            await call.message.answer_animation(
+                animation=BANNER_GIF,
+                caption=text,
+                reply_markup=main_keyboard()
+            )
+        except Exception:
+            await call.message.edit_text(text, reply_markup=main_keyboard())
 
 # ── Saqlash ────────────────────────────────────────────
 @router.callback_query(F.data.startswith("save:"))
