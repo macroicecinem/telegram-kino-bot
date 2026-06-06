@@ -70,7 +70,7 @@ def init_db():
     conn.commit()
 
     # Yangi ustunlar qo'shish (agar mavjud bo'lmasa)
-    for col, coltype in [("country", "TEXT"), ("quality", "TEXT"), ("language", "TEXT"), ("code", "TEXT"), ("views", "INTEGER DEFAULT 0")]:
+    for col, coltype in [("country", "TEXT"), ("quality", "TEXT"), ("language", "TEXT"), ("code", "TEXT"), ("views", "INTEGER DEFAULT 0"), ("channel_post_id", "BIGINT"), ("channel_username", "TEXT")]:
         try:
             c.execute(f"ALTER TABLE movies ADD COLUMN {col} {coltype}")
             conn.commit()
@@ -196,12 +196,20 @@ def delete_genre(genre_id: int):
 
 
 # ── MOVIE ──────────────────────────────────────────────
-def add_movie(title, link, genre_id=None, description=None, poster_url=None, year=None, country=None, quality=None, language=None, code=None) -> int:
+def add_movie(title, link, genre_id=None, description=None, poster_url=None, year=None, country=None, quality=None, language=None, code=None, channel_username=None, channel_post_id=None) -> int:
     conn = get_conn()
     c = conn.cursor()
+
+    # Avtomatik kod generatsiya
+    if not code:
+        c.execute("SELECT COALESCE(MAX(CAST(code AS INTEGER)), 100) FROM movies WHERE code ~ '^[0-9]+$'")
+        row = c.fetchone()
+        max_code = list(row.values())[0] if row else 100
+        code = str(max_code + 1)
+
     c.execute(
-        "INSERT INTO movies (title, link, genre_id, description, poster_url, year, country, quality, language, code) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-        (title, link, genre_id, description, poster_url, year, country, quality, language, code)
+        "INSERT INTO movies (title, link, genre_id, description, poster_url, year, country, quality, language, code, channel_username, channel_post_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+        (title, link, genre_id, description, poster_url, year, country, quality, language, code, channel_username, channel_post_id)
     )
     row = c.fetchone()
     conn.commit()
@@ -402,3 +410,46 @@ def get_movie_by_code(code: str):
     row = c.fetchone()
     conn.close()
     return row
+
+
+def save_forward_message(user_id: int, movie_id: int, message_id: int):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS forward_messages (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            movie_id INTEGER NOT NULL,
+            message_id BIGINT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    c.execute(
+        "INSERT INTO forward_messages (user_id, movie_id, message_id) VALUES (%s, %s, %s)",
+        (user_id, movie_id, message_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_forward_messages(user_id: int, movie_id: int):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        "SELECT message_id FROM forward_messages WHERE user_id=%s AND movie_id=%s ORDER BY created_at DESC LIMIT 5",
+        (user_id, movie_id)
+    )
+    rows = c.fetchall()
+    conn.close()
+    return [r["message_id"] for r in rows]
+
+
+def delete_forward_messages(user_id: int, movie_id: int):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        "DELETE FROM forward_messages WHERE user_id=%s AND movie_id=%s",
+        (user_id, movie_id)
+    )
+    conn.commit()
+    conn.close()
