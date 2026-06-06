@@ -346,7 +346,20 @@ async def add_movie_title(message: Message, state: FSMContext):
 
 @router.message(AddMovie.link)
 async def add_movie_link(message: Message, state: FSMContext):
-    await state.update_data(link=message.text.strip())
+    link = message.text.strip()
+    
+    # Kanal linkdan post_id va channel_username ajratib olish
+    # https://t.me/macroice_marvel/123 -> channel: macroice_marvel, post_id: 123
+    channel_username = None
+    channel_post_id = None
+    
+    import re
+    match = re.match(r"https?://t\.me/([^/]+)/(\d+)", link)
+    if match:
+        channel_username = match.group(1)
+        channel_post_id = int(match.group(2))
+    
+    await state.update_data(link=link, channel_username=channel_username, channel_post_id=channel_post_id)
     await state.set_state(AddMovie.genre)
     genres = db.get_genres()
     builder = InlineKeyboardBuilder()
@@ -401,8 +414,10 @@ async def add_movie_quality(message: Message, state: FSMContext):
 async def add_movie_language(message: Message, state: FSMContext):
     val = message.text.strip()
     await state.update_data(language=None if val == "—" else val)
-    await state.set_state(AddMovie.code)
-    await message.answer("🔢 Film kodini kiriting (masalan: 911) yoki — :")
+    # Kod avtomatik generatsiya qilinadi
+    await state.update_data(code=None)
+    await state.set_state(AddMovie.description)
+    await message.answer("📝 Tavsif kiriting (yoki — deb yozing):")
 
 
 @router.message(AddMovie.code)
@@ -411,6 +426,9 @@ async def add_movie_code(message: Message, state: FSMContext):
     await state.update_data(code=None if val == "—" else val)
     await state.set_state(AddMovie.description)
     await message.answer("📝 Tavsif kiriting (yoki — deb yozing):")
+
+
+
 
 
 @router.message(AddMovie.description)
@@ -436,7 +454,9 @@ async def add_movie_poster(message: Message, state: FSMContext):
         country=data.get("country"),
         quality=data.get("quality"),
         language=data.get("language"),
-        code=data.get("code")
+        code=data.get("code"),
+        channel_username=data.get("channel_username"),
+        channel_post_id=data.get("channel_post_id")
     )
     await state.clear()
     await message.answer(
