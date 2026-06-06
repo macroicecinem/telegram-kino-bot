@@ -30,6 +30,17 @@ class AddAdmin(StatesGroup):
     user_id = State()
 
 
+class AddSaga(StatesGroup):
+    genre_id = State()
+    name = State()
+    sort_order = State()
+
+
+class AssignSaga(StatesGroup):
+    movie_id = State()
+    saga_name = State()
+
+
 class EditMovie(StatesGroup):
     field = State()
     value = State()
@@ -49,6 +60,7 @@ def admin_panel_keyboard():
     builder.button(text="➕ Admin qo'shish", callback_data="admin:add_admin")
     builder.button(text="📊 Statistika", callback_data="admin:stats")
     builder.button(text="📢 Hammaga xabar", callback_data="admin:broadcast")
+    builder.button(text="🎭 Sagalar", callback_data="admin:sagas")
     builder.adjust(2)
     return builder.as_markup()
 
@@ -139,6 +151,16 @@ async def admin_callback(call: CallbackQuery, state: FSMContext):
             "<i>(Matn, rasm yoki video yuborishingiz mumkin)</i>"
         )
         await call.answer()
+
+    elif action == "sagas":
+        genres = db.get_genres()
+        builder = InlineKeyboardBuilder()
+        for g in genres:
+            sagas = db.get_sagas_by_genre(g["id"])
+            builder.button(text=f"🎭 {g['name']} ({len(sagas)} saga)", callback_data=f"manage_sagas:{g['id']}")
+        builder.button(text="⬅️ Panel", callback_data="admin:back")
+        builder.adjust(1)
+        await call.message.edit_text("🎭 <b>Saga boshqaruvi</b>\n\nJanrni tanlang:", reply_markup=builder.as_markup())
 
     elif action == "stats":
         count = db.get_movies_count()
@@ -524,3 +546,143 @@ async def broadcast_send(message: Message, state: FSMContext, bot: Bot):
         f"✅ Muvaffaqiyatli: {success} ta\n"
         f"❌ Yetmadi: {failed} ta"
     )
+
+
+# ── Saga boshqaruvi ────────────────────────────────────
+@router.callback_query(F.data.startswith("manage_sagas:"))
+async def manage_sagas(call: CallbackQuery):
+    if not db.is_admin(call.from_user.id):
+        await call.answer("❌ Ruxsat yo'q!", show_alert=True)
+        return
+
+    genre_id = int(call.data.split(":")[1])
+    genre = next((g for g in db.get_genres() if g["id"] == genre_id), None)
+    sagas = db.get_sagas_by_genre(genre_id)
+
+    builder = InlineKeyboardBuilder()
+    for saga in sagas:
+        builder.button(text=f"🗑 {saga['name']}", callback_data=f"del_saga:{saga['id']}")
+    builder.button(text="➕ Saga qo'shish", callback_data=f"add_saga:{genre_id}")
+    builder.button(text="🎬 Kinoga saga belgilash", callback_data=f"assign_saga_start:{genre_id}")
+    builder.button(text="⬅️ Orqaga", callback_data="admin:sagas")
+    builder.adjust(1)
+
+    await call.message.edit_text(
+        f"🎭 <b>{genre['name']}</b> sagalari ({len(sagas)} ta):\\n\\n"
+        f"🗑 O'chirish uchun bosing:",
+        reply_markup=builder.as_markup()
+    )
+
+
+@router.callback_query(F.data.startswith("del_saga:"))
+async def delete_saga(call: CallbackQuery):
+    if not db.is_admin(call.from_user.id):
+        await call.answer("❌ Ruxsat yo'q!", show_alert=True)
+        return
+    saga_id = int(call.data.split(":")[1])
+    db.delete_saga(saga_id)
+    await call.answer("✅ Saga o'chirildi!", show_alert=True)
+    await manage_sagas(call)
+
+
+@router.callback_query(F.data.startswith("add_saga:"))
+async def add_saga_start(call: CallbackQuery, state: FSMContext):
+    if not db.is_admin(call.from_user.id):
+        await call.answer("❌ Ruxsat yo'q!", show_alert=True)
+        return
+    genre_id = int(call.data.split(":")[1])
+    await state.set_state(AddSaga.name)
+    await state.update_data(genre_id=genre_id)
+    await call.message.answer(
+        "🎭 Saga nomini kiriting:\\n\\n"
+        "Masalan: <b>Faza 1: Avengers boshlang'ich</b>"
+    )
+    await call.answer()
+
+
+@router.message(AddSaga.name)
+async def add_saga_name(message: Message, state: FSMContext):
+    data = await state.get_data()
+    genre_id = data["genre_id"]
+    name = message.text.strip()
+    await state.update_data(name=name)
+    await state.set_state(AddSaga.sort_order)
+    await message.answer("📊 Tartib raqamini kiriting (1, 2, 3...):")
+
+
+@router.message(AddSaga.sort_order)
+async def add_saga_order(message: Message, state: FSMContext):
+    data = await state.get_data()
+    try:
+        sort_order = int(message.text.strip())
+    except ValueError:
+        await message.answer("Raqam kiriting:")
+        return
+    db.add_saga(data["genre_id"], data["name"], sort_order)
+    await state.clear()
+    await message.answer(
+        f"✅ <b>{data['name']}</b> saga qo'shildi!\\n\\n/admin — panelga qaytish"
+    )
+
+
+# ── Kinoga saga belgilash ──────────────────────────────
+@router.callback_query(F.data.startswith("assign_saga_start:"))
+async def assign_saga_start(call: CallbackQuery, state: FSMContext):
+    if not db.is_admin(call.from_user.id):
+        await call.answer("❌ Ruxsat yo'q!", show_alert=True)
+        return
+    genre_id = int(call.data.split(":")[1])
+    movies = db.get_movies_by_genre(genre_id)
+
+    builder = InlineKeyboardBuilder()
+    for m in movies:
+        saga_label = f" [{m['saga']}]" if m.get('saga') else ""
+        builder.button(text=f"{m['title']}{saga_label}", callback_data=f"assign_saga_movie:{m['id']}:{genre_id}")
+    builder.button(text="⬅️ Orqaga", callback_data=f"manage_sagas:{genre_id}")
+    builder.adjust(1)
+
+    await call.message.edit_text(
+        "🎬 Saga belgilamoqchi bo'lgan kinoni tanlang:",
+        reply_markup=builder.as_markup()
+    )
+
+
+@router.callback_query(F.data.startswith("assign_saga_movie:"))
+async def assign_saga_movie(call: CallbackQuery, state: FSMContext):
+    if not db.is_admin(call.from_user.id):
+        await call.answer("❌ Ruxsat yo'q!", show_alert=True)
+        return
+    parts = call.data.split(":")
+    movie_id = int(parts[1])
+    genre_id = int(parts[2])
+
+    sagas = db.get_sagas_by_genre(genre_id)
+    builder = InlineKeyboardBuilder()
+    for saga in sagas:
+        builder.button(text=saga["name"], callback_data=f"set_saga:{movie_id}:{saga['name']}")
+    builder.button(text="❌ Sagani o'chirish", callback_data=f"set_saga:{movie_id}:__remove__")
+    builder.button(text="⬅️ Orqaga", callback_data=f"assign_saga_start:{genre_id}")
+    builder.adjust(1)
+
+    movie = db.get_movie(movie_id)
+    await call.message.edit_text(
+        f"🎬 <b>{movie['title']}</b>\\n\\nQaysi sagaga kiradi?",
+        reply_markup=builder.as_markup()
+    )
+
+
+@router.callback_query(F.data.startswith("set_saga:"))
+async def set_saga(call: CallbackQuery):
+    if not db.is_admin(call.from_user.id):
+        await call.answer("❌ Ruxsat yo'q!", show_alert=True)
+        return
+    parts = call.data.split(":", 2)
+    movie_id = int(parts[1])
+    saga_name = parts[2]
+
+    if saga_name == "__remove__":
+        db.update_movie(movie_id, saga=None)
+        await call.answer("✅ Saga o'chirildi!", show_alert=True)
+    else:
+        db.update_movie(movie_id, saga=saga_name)
+        await call.answer(f"✅ {saga_name} saga belgilandi!", show_alert=True)
