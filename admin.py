@@ -230,6 +230,7 @@ async def edit_movie_start(call: CallbackQuery, state: FSMContext):
 
 @router.message(EditMovie.value)
 async def edit_movie_save(message: Message, state: FSMContext):
+    import re
     data = await state.get_data()
     movie_id = data["movie_id"]
     field = data["field"]
@@ -245,7 +246,16 @@ async def edit_movie_save(message: Message, state: FSMContext):
             await message.answer("❌ Yil uchun raqam kiriting:")
             return
 
-    db.update_movie(movie_id, **{field: value})
+    # Link o'zgartirilsa channel ma'lumotlarini ham yangilaymiz
+    if field == "link" and value:
+        match = re.match(r"https?://t\.me/([^/]+)/(\d+)", value)
+        if match:
+            db.update_movie(movie_id, link=value, channel_username=match.group(1), channel_post_id=int(match.group(2)))
+        else:
+            db.update_movie(movie_id, link=value, channel_username=None, channel_post_id=None)
+    else:
+        db.update_movie(movie_id, **{field: value})
+
     await state.clear()
 
     movie = db.get_movie(movie_id)
