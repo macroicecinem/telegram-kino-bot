@@ -253,6 +253,20 @@ def search_movies(query: str):
     return rows
 
 
+
+def update_movie(movie_id: int, **kwargs):
+    allowed = {"title", "link", "genre_id", "description", "poster_url", "year", "country", "quality", "language", "code", "channel_username", "channel_post_id"}
+    fields = {k: v for k, v in kwargs.items() if k in allowed}
+    if not fields:
+        return
+    set_clause = ", ".join(f"{k}=%s" for k in fields)
+    values = list(fields.values()) + [movie_id]
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(f"UPDATE movies SET {set_clause} WHERE id=%s", values)
+    conn.commit()
+    conn.close()
+
 def delete_movie(movie_id: int):
     conn = get_conn()
     c = conn.cursor()
