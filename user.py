@@ -268,23 +268,94 @@ async def genre_selected(call: CallbackQuery, bot: Bot):
         return
 
     genre_id = int(call.data.split(":")[1])
-    movies = db.get_movies_by_genre(genre_id)
     genre = next((g for g in db.get_genres() if g["id"] == genre_id), None)
 
+    if not genre:
+        await call.answer("Janr topilmadi!", show_alert=True)
+        return
+
+    # Sagalar bormi?
+    sagas = db.get_sagas_by_genre(genre_id)
+
+    if sagas:
+        # Saga ko'rinishi
+        builder = InlineKeyboardBuilder()
+        for saga in sagas:
+            movies_in_saga = db.get_movies_by_saga(saga["name"], genre_id)
+            builder.button(
+                text=f"🎬 {saga['name']} ({len(movies_in_saga)} ta)",
+                callback_data=f"saga:{genre_id}:{saga['name']}"
+            )
+        # Sagasiz kinolar ham bormi?
+        no_saga = db.get_movies_without_saga(genre_id)
+        if no_saga:
+            builder.button(text=f"📽 Boshqa kinolar ({len(no_saga)} ta)", callback_data=f"saga:{genre_id}:__nosaga__")
+        builder.button(text="⬅️ Orqaga", callback_data="all_movies")
+        builder.adjust(1)
+
+        total = db.get_movies_by_genre(genre_id)
+        try:
+            await call.message.edit_text(
+                f"🎬 <b>{genre['name']}</b> — {len(total)} ta kino\n\nSagani tanlang:",
+                reply_markup=builder.as_markup()
+            )
+        except Exception:
+            await call.message.delete()
+            await call.message.answer(
+                f"🎬 <b>{genre['name']}</b> — {len(total)} ta kino\n\nSagani tanlang:",
+                reply_markup=builder.as_markup()
+            )
+    else:
+        # Oddiy ko'rinish
+        movies = db.get_movies_by_genre(genre_id)
+        if not movies:
+            await call.answer("Bu janrda hali kino yo'q 😕", show_alert=True)
+            return
+        try:
+            await call.message.edit_text(
+                f"🎬 <b>{genre['name']}</b> — {len(movies)} ta kino\n\nKinoni tanlang:",
+                reply_markup=movies_keyboard(movies, back_callback="all_movies")
+            )
+        except Exception:
+            await call.message.delete()
+            await call.message.answer(
+                f"🎬 <b>{genre['name']}</b> — {len(movies)} ta kino\n\nKinoni tanlang:",
+                reply_markup=movies_keyboard(movies, back_callback="all_movies")
+            )
+
+
+# ── Saga ───────────────────────────────────────────────
+@router.callback_query(F.data.startswith("saga:"))
+async def saga_selected(call: CallbackQuery, bot: Bot):
+    if not await check_subscription(bot, call.from_user.id):
+        await call.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
+        return
+
+    parts = call.data.split(":", 2)
+    genre_id = int(parts[1])
+    saga_name = parts[2]
+
+    if saga_name == "__nosaga__":
+        movies = db.get_movies_without_saga(genre_id)
+        title = "📽 Boshqa kinolar"
+    else:
+        movies = db.get_movies_by_saga(saga_name, genre_id)
+        title = saga_name
+
     if not movies:
-        await call.answer("Bu janrda hali kino yo'q 😕", show_alert=True)
+        await call.answer("Bu sagada kino yo'q 😕", show_alert=True)
         return
 
     try:
         await call.message.edit_text(
-            f"🎬 <b>{genre['name']}</b> — {len(movies)} ta kino\n\nKinoni tanlang:",
-            reply_markup=movies_keyboard(movies, back_callback="all_movies")
+            f"🎬 <b>{title}</b> — {len(movies)} ta kino\n\nKinoni tanlang:",
+            reply_markup=movies_keyboard(movies, back_callback=f"genre:{genre_id}")
         )
     except Exception:
         await call.message.delete()
         await call.message.answer(
-            f"🎬 <b>{genre['name']}</b> — {len(movies)} ta kino\n\nKinoni tanlang:",
-            reply_markup=movies_keyboard(movies, back_callback="all_movies")
+            f"🎬 <b>{title}</b> — {len(movies)} ta kino\n\nKinoni tanlang:",
+            reply_markup=movies_keyboard(movies, back_callback=f"genre:{genre_id}")
         )
 
 
