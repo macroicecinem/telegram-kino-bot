@@ -221,7 +221,7 @@ def get_movies_by_genre(genre_id: int):
     conn = get_conn()
     c = conn.cursor()
     c.execute(
-        "SELECT m.*, g.name as genre_name FROM movies m LEFT JOIN genres g ON m.genre_id=g.id WHERE m.genre_id=%s ORDER BY m.title",
+        "SELECT m.*, g.name as genre_name FROM movies m LEFT JOIN genres g ON m.genre_id=g.id WHERE m.genre_id=%s ORDER BY CAST(m.code AS INTEGER) NULLS LAST, m.title",
         (genre_id,)
     )
     rows = c.fetchall()
