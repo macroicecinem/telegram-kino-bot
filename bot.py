@@ -44,7 +44,9 @@ async def main():
         text = query.query.strip()
         results = []
 
-        if len(text) >= 1:
+        if text.lower() == "top":
+            movies = db.get_top_movies(20)
+        elif len(text) >= 1:
             movies = db.search_movies(text)
         else:
             movies = db.get_all_movies()
@@ -61,6 +63,8 @@ async def main():
                 desc_parts.append(f"🎭 {movie['genre_name']}")
             if movie.get("country"):
                 desc_parts.append(f"🌍 {movie['country']}")
+            if movie.get("views"):
+                desc_parts.append(f"👁 {movie['views']}")
 
             description = " | ".join(desc_parts)
 
