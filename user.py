@@ -59,7 +59,7 @@ def main_keyboard():
     builder.button(text="🔍 Qidirish", switch_inline_query_current_chat="")
     builder.button(text="📂 Filter", callback_data="filter_menu")
     builder.button(text="⭐️ Saqlangan", callback_data="saved_movies")
-    builder.button(text="🏆 Top filmlar", callback_data="top_movies")
+    builder.button(text="🏆 Top filmlar", switch_inline_query_current_chat="top")
     builder.button(text="❓ Yordam", callback_data="help_menu")
     builder.adjust(2)
     return builder.as_markup()
