@@ -663,7 +663,13 @@ async def contact_admin_send(message: Message, state: FSMContext, bot: Bot):
     )
 
     try:
-        await bot.send_message(admin_id, text)
+        # Adminga javob tugmasi bilan yuborish
+        reply_builder = InlineKeyboardBuilder()
+        reply_builder.button(
+            text="↩️ Javob berish",
+            callback_data=f"reply_user:{user.id}"
+        )
+        await bot.send_message(admin_id, text, reply_markup=reply_builder.as_markup())
         await message.answer("✅ Xabaringiz adminga yuborildi!")
     except Exception:
         await message.answer("❌ Xabar yuborilmadi. Keyinroq urinib ko'ring.")
