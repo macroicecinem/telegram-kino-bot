@@ -8,10 +8,16 @@ import database as db
 
 router = Router()
 
-TELEGRAM_CHANNEL = "@macroicecinema"
 YOUTUBE_URL = "https://www.youtube.com/@MACROICEcinema"
 INSTAGRAM_URL = "https://www.instagram.com/macroice_cinema/"
 BANNER_GIF = "CgACAgIAAxkBAAIxC2oiuTuJXS1LQbV2EnOXz64qhIzJAAKWoQACWfYZSa2rlxDma_1cOwQ"
+
+# Obuna tekshiriladigan kanallar
+REQUIRED_CHANNELS = [
+    {"username": "@macroicecinema", "url": "https://t.me/macroicecinema", "name": "🎬 MACROICE Cinema"},
+    {"username": "@macroice_marvel", "url": "https://t.me/macroice_marvel", "name": "⚡️ Marvel kinolari"},
+    {"username": "@macroice_film", "url": "https://t.me/macroice_film", "name": "🎥 MACROICE Film"},
+]
 
 
 class Registration(StatesGroup):
@@ -19,16 +25,20 @@ class Registration(StatesGroup):
 
 
 async def check_subscription(bot: Bot, user_id: int) -> bool:
-    try:
-        member = await bot.get_chat_member(TELEGRAM_CHANNEL, user_id)
-        return member.status not in ("left", "kicked", "banned")
-    except Exception:
-        return False
+    for channel in REQUIRED_CHANNELS:
+        try:
+            member = await bot.get_chat_member(channel["username"], user_id)
+            if member.status in ("left", "kicked", "banned"):
+                return False
+        except Exception:
+            return False
+    return True
 
 
 def subscription_keyboard():
     builder = InlineKeyboardBuilder()
-    builder.button(text="📺 Telegram kanal", url="https://t.me/macroicecinema")
+    for ch in REQUIRED_CHANNELS:
+        builder.button(text=ch["name"], url=ch["url"])
     builder.button(text="▶️ YouTube kanal", url=YOUTUBE_URL)
     builder.button(text="📸 Instagram", url=INSTAGRAM_URL)
     builder.button(text="✅ Obuna bo'ldim!", callback_data="check_sub")
