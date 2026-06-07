@@ -658,7 +658,7 @@ async def contact_admin_send(message: Message, state: FSMContext, bot: Bot):
         f"📩 <b>Foydalanuvchidan xabar</b>\n\n"
         f"👤 Ism: {user.full_name}\n"
         f"🆔 ID: <code>{user.id}</code>\n"
-        f"👤 Username: @{user.username or 'yo'q'}\n\n"
+        f"👤 Username: @{user.username or 'yoq'}\n\n"
         f"💬 Xabar:\n{message.text}"
     )
 
