@@ -59,6 +59,8 @@ def main_keyboard():
     builder.button(text="🔍 Qidirish", switch_inline_query_current_chat="")
     builder.button(text="📂 Filter", callback_data="filter_menu")
     builder.button(text="⭐️ Saqlangan", callback_data="saved_movies")
+    builder.button(text="🏆 Top filmlar", callback_data="top_movies")
+    builder.button(text="❓ Yordam", callback_data="help_menu")
     builder.adjust(2)
     return builder.as_markup()
 
@@ -127,13 +129,9 @@ def movie_card_text(movie):
 
 
 async def show_main_menu(message: Message):
-    count = db.get_movies_count()
     text = (
-        f"🎬 <b>MACROICE Cinema botiga xush kelibsiz!</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"🍿 Bazada: <b>{count} ta</b> kino\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"Quyidagilardan birini tanlang 👇"
+        "🎬 <b>MACROICE Cinema botiga xush kelibsiz!</b>\n\n"
+        "🔢 Kerakli film uchun kodni yozing"
     )
     try:
         await message.answer_animation(animation=BANNER_GIF, caption=text, reply_markup=main_keyboard())
@@ -241,11 +239,8 @@ async def check_sub_callback(call: CallbackQuery, bot: Bot):
 async def back_main(call: CallbackQuery):
     count = db.get_movies_count()
     text = (
-        f"🎬 <b>MACROICE Cinema botiga xush kelibsiz!</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"🍿 Bazada: <b>{count} ta</b> kino\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"Quyidagilardan birini tanlang 👇"
+        "🎬 <b>MACROICE Cinema botiga xush kelibsiz!</b>\n\n"
+        "🔢 Kerakli film uchun kodni yozing"
     )
     try:
         await call.message.delete()
@@ -566,6 +561,118 @@ async def filter_result(call: CallbackQuery):
         await call.message.delete()
         await call.message.answer(f"📂 <b>{len(movies)} ta natija:</b>", reply_markup=builder.as_markup())
 
+
+
+
+# ── Top filmlar ────────────────────────────────────────
+@router.callback_query(F.data == "top_movies")
+async def top_movies(call: CallbackQuery, bot: Bot):
+    if not await check_subscription(bot, call.from_user.id):
+        await call.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
+        return
+
+    movies = db.get_top_movies(20)
+    if not movies:
+        await call.answer("Hali ko'rishlar yo'q!", show_alert=True)
+        return
+
+    builder = InlineKeyboardBuilder()
+    for i, m in enumerate(movies, 1):
+        views = m.get("views") or 0
+        label = f"{i}. {m['title']}"
+        if m.get("year"):
+            label += f" ({m['year']})"
+        label += f" — 👁{views}"
+        builder.button(text=label, callback_data=f"movie:{m['id']}")
+    builder.button(text="⬅️ Orqaga", callback_data="back_main")
+    builder.adjust(1)
+
+    try:
+        await call.message.edit_text(
+            "🏆 <b>Top filmlar</b>\n\nEng ko'p ko'rilgan kinolar:",
+            reply_markup=builder.as_markup()
+        )
+    except Exception:
+        await call.message.delete()
+        await call.message.answer(
+            "🏆 <b>Top filmlar</b>\n\nEng ko'p ko'rilgan kinolar:",
+            reply_markup=builder.as_markup()
+        )
+
+
+# ── Yordam ─────────────────────────────────────────────
+@router.callback_query(F.data == "help_menu")
+async def help_menu(call: CallbackQuery, bot: Bot):
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✉️ Adminga xabar yuborish", callback_data="contact_admin")
+    builder.button(text="⬅️ Orqaga", callback_data="back_main")
+    builder.adjust(1)
+
+    try:
+        await call.message.edit_text(
+            "❓ <b>Yordam</b>\n\n"
+            "🔢 Film kodi: Telegram kanallarimizda har bir film postida kod ko'rsatilgan. "
+            "Shu kodni botga yozing — film darhol chiqadi!\n\n"
+            "🔍 Qidiruv: Film nomini yozing yoki @macroicebot orqali qidiring\n\n"
+            "📢 Muammo yoki taklif bo'lsa adminga yozing 👇",
+            reply_markup=builder.as_markup()
+        )
+    except Exception:
+        await call.message.delete()
+        await call.message.answer(
+            "❓ <b>Yordam</b>\n\n"
+            "🔢 Film kodi: Telegram kanallarimizda har bir film postida kod ko'rsatilgan. "
+            "Shu kodni botga yozing — film darhol chiqadi!\n\n"
+            "🔍 Qidiruv: Film nomini yozing yoki @macroicebot orqali qidiring\n\n"
+            "📢 Muammo yoki taklif bo'lsa adminga yozing 👇",
+            reply_markup=builder.as_markup()
+        )
+
+
+class ContactAdmin(StatesGroup):
+    message = State()
+
+
+@router.callback_query(F.data == "contact_admin")
+async def contact_admin_start(call: CallbackQuery, state: FSMContext):
+    await state.set_state(ContactAdmin.message)
+    builder = InlineKeyboardBuilder()
+    builder.button(text="❌ Bekor qilish", callback_data="help_menu")
+    try:
+        await call.message.edit_text(
+            "✉️ <b>Adminga xabar</b>\n\nXabaringizni yozing:",
+            reply_markup=builder.as_markup()
+        )
+    except Exception:
+        await call.message.answer("✉️ Xabaringizni yozing:")
+    await call.answer()
+
+
+@router.message(ContactAdmin.message)
+async def contact_admin_send(message: Message, state: FSMContext, bot: Bot):
+    import os
+    admin_id = os.getenv("SUPER_ADMIN_ID")
+    user = message.from_user
+
+    text = (
+        f"📩 <b>Foydalanuvchidan xabar</b>\n\n"
+        f"👤 Ism: {user.full_name}\n"
+        f"🆔 ID: <code>{user.id}</code>\n"
+        f"👤 Username: @{user.username or 'yo'q'}\n\n"
+        f"💬 Xabar:\n{message.text}"
+    )
+
+    try:
+        await bot.send_message(admin_id, text)
+        await message.answer("✅ Xabaringiz adminga yuborildi!")
+    except Exception:
+        await message.answer("❌ Xabar yuborilmadi. Keyinroq urinib ko'ring.")
+
+    await state.clear()
+
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🏠 Bosh sahifa", callback_data="back_main")
+    await message.answer("Bosh sahifaga qaytish:", reply_markup=builder.as_markup())
 
 # ── Qidirish ───────────────────────────────────────────
 @router.callback_query(F.data == "search")
