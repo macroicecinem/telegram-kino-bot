@@ -686,3 +686,64 @@ async def set_saga(call: CallbackQuery):
     else:
         db.update_movie(movie_id, saga=saga_name)
         await call.answer(f"✅ {saga_name} saga belgilandi!", show_alert=True)
+
+
+# ── Foydalanuvchiga javob ──────────────────────────────
+class ReplyUser(StatesGroup):
+    message = State()
+    user_id = State()
+
+
+@router.callback_query(F.data.startswith("reply_user:"))
+async def reply_user_start(call: CallbackQuery, state: FSMContext):
+    if not db.is_admin(call.from_user.id):
+        await call.answer("❌ Ruxsat yo'q!", show_alert=True)
+        return
+    user_id = int(call.data.split(":")[1])
+    await state.set_state(ReplyUser.message)
+    await state.update_data(user_id=user_id)
+    await call.message.answer(
+        f"↩️ <b>{user_id}</b> ga javob yozing:\n\n"
+        f"Bekor qilish uchun /cancel"
+    )
+    await call.answer()
+
+
+@router.message(Command("cancel"))
+async def cancel_reply(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("❌ Bekor qilindi.")
+
+
+@router.message(ReplyUser.message)
+async def reply_user_send(message: Message, state: FSMContext, bot: Bot):
+    data = await state.get_data()
+    user_id = data["user_id"]
+
+    try:
+        await bot.send_message(
+            user_id,
+            f"📨 <b>Admin javobi:</b>\n\n{message.text}"
+        )
+        await message.answer(f"✅ Javob {user_id} ga yuborildi!")
+    except Exception:
+        await message.answer("❌ Foydalanuvchiga yuborib bo'lmadi.")
+
+    await state.clear()
+
+
+@router.message(Command("reply"))
+async def cmd_reply(message: Message, bot: Bot):
+    if not db.is_admin(message.from_user.id):
+        return
+    parts = message.text.split(" ", 2)
+    if len(parts) < 3:
+        await message.answer("Format: /reply USER_ID xabar matni")
+        return
+    try:
+        user_id = int(parts[1])
+        text = parts[2]
+        await bot.send_message(user_id, f"📨 <b>Admin javobi:</b>\n\n{text}")
+        await message.answer(f"✅ Javob {user_id} ga yuborildi!")
+    except Exception as e:
+        await message.answer(f"❌ Xato: {e}")
