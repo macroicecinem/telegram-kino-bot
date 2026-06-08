@@ -279,10 +279,11 @@ async def genre_selected(call: CallbackQuery, bot: Bot):
         await call.answer("Janr topilmadi!", show_alert=True)
         return
 
-    # Sagalar bormi?
+    # Sagalar bormi? (Faqat Marvel janri uchun)
     sagas = db.get_sagas_by_genre(genre_id)
+    is_marvel = genre and genre["name"].lower() == "marvel"
 
-    if sagas:
+    if sagas and is_marvel:
         # Saga ko'rinishi
         builder = InlineKeyboardBuilder()
         for saga in sagas:
