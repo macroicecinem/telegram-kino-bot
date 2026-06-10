@@ -384,6 +384,61 @@ async def movie_selected(call: CallbackQuery, bot: Bot):
 
     db.increment_views(movie_id)
     movie = dict(movie)
+
+    # Agar channel_post_id bo'lsa to'g'ridan watch ga o'tkazamiz
+    if movie.get("channel_post_id") and movie.get("channel_username"):
+        channel = movie["channel_username"]
+        if not channel.startswith("@"):
+            channel = "@" + channel
+        genre_id = movie.get("genre_id") or 0
+
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
+
+        try:
+            sent_msg = None
+            try:
+                sent_msg = await bot.copy_message(
+                    chat_id=call.from_user.id,
+                    from_chat_id=channel,
+                    message_id=movie["channel_post_id"]
+                )
+            except Exception:
+                sent_msg = await bot.forward_message(
+                    chat_id=call.from_user.id,
+                    from_chat_id=channel,
+                    message_id=movie["channel_post_id"]
+                )
+
+            back_builder = InlineKeyboardBuilder()
+            back_builder.button(
+                text="⬅️ Orqaga",
+                callback_data=f"delete_and_back:{movie_id}:{genre_id}:{sent_msg.message_id}"
+            )
+            await bot.send_message(
+                chat_id=call.from_user.id,
+                text="👆 Film yuqorida",
+                reply_markup=back_builder.as_markup()
+            )
+        except Exception:
+            if movie.get("link"):
+                link_builder = InlineKeyboardBuilder()
+                link_builder.button(text="▶️ Kanal orqali ko'rish", url=movie["link"])
+                if genre_id:
+                    link_builder.button(text="⬅️ Orqaga", callback_data=f"genre:{genre_id}")
+                else:
+                    link_builder.button(text="⬅️ Orqaga", callback_data="back_main")
+                link_builder.adjust(1)
+                await bot.send_message(
+                    call.from_user.id,
+                    f"🎬 <b>{movie.get('title', 'Film')}</b>\n\n▶️ Filmni ko'rish uchun tugmani bosing:",
+                    reply_markup=link_builder.as_markup()
+                )
+        return
+
+    # channel_post_id yo'q — info kartochka ko'rsatamiz
     text = movie_card_text(movie)
     kb = movie_keyboard(movie, call.from_user.id)
 
