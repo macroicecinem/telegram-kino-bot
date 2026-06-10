@@ -89,7 +89,10 @@ def movies_keyboard(movies, back_callback="back_genres_main"):
 
 def movie_keyboard(movie: dict, user_id: int):
     builder = InlineKeyboardBuilder()
-    if movie.get("link"):
+    # Forward imkoniyati bo'lsa callback, bo'lmasa url
+    if movie.get("channel_post_id") and movie.get("channel_username"):
+        builder.button(text="▶️ Ko'rish", callback_data=f"watch:{movie['id']}")
+    elif movie.get("link"):
         builder.button(text="▶️ Ko'rish", url=movie["link"])
     saved = db.is_saved(user_id, movie["id"])
     if saved:
@@ -400,6 +403,103 @@ async def movie_selected(call: CallbackQuery, bot: Bot):
             await call.message.delete()
             await call.message.answer(text, reply_markup=kb)
 
+
+
+# ── Kino ko'rish (forward) ─────────────────────────────
+@router.callback_query(F.data.startswith("watch:"))
+async def watch_movie(call: CallbackQuery, bot: Bot):
+    if not await check_subscription(bot, call.from_user.id):
+        await call.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
+        return
+
+    movie_id = int(call.data.split(":")[1])
+    movie = db.get_movie(movie_id)
+    if not movie:
+        await call.answer("Kino topilmadi!", show_alert=True)
+        return
+
+    movie = dict(movie)
+    channel = movie.get("channel_username", "")
+    post_id = movie.get("channel_post_id")
+
+    if not channel or not post_id:
+        await call.answer("Kino linki topilmadi!", show_alert=True)
+        return
+
+    if not channel.startswith("@"):
+        channel = "@" + channel
+
+    genre_id = movie.get("genre_id") or 0
+
+    try:
+        # Info xabarni o'chirish
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
+
+        # Forward qilish
+        forwarded = await bot.forward_message(
+            chat_id=call.from_user.id,
+            from_chat_id=channel,
+            message_id=post_id
+        )
+
+        # Orqaga tugmasi
+        back_builder = InlineKeyboardBuilder()
+        back_builder.button(
+            text="⬅️ Orqaga",
+            callback_data=f"delete_and_back:{movie_id}:{genre_id}:{forwarded.message_id}"
+        )
+        back_msg = await bot.send_message(
+            chat_id=call.from_user.id,
+            text="👆 Film yuqorida",
+            reply_markup=back_builder.as_markup()
+        )
+
+    except Exception as e:
+        await call.answer("❌ Film yuklanmadi, keyinroq urinib ko'ring!", show_alert=True)
+
+
+# ── O'chirib orqaga ────────────────────────────────────
+@router.callback_query(F.data.startswith("delete_and_back:"))
+async def delete_and_back(call: CallbackQuery, bot: Bot):
+    parts = call.data.split(":")
+    movie_id = int(parts[1])
+    genre_id = int(parts[2])
+    forward_msg_id = int(parts[3])
+
+    # Forward va orqaga xabarlarini o'chirish
+    for msg_id in [forward_msg_id, call.message.message_id]:
+        try:
+            await bot.delete_message(call.from_user.id, msg_id)
+        except Exception:
+            pass
+
+    # Janrga qaytish
+    if genre_id and genre_id != 0:
+        movies = db.get_movies_by_genre(genre_id)
+        genre = next((g for g in db.get_genres() if g["id"] == genre_id), None)
+        if genre and movies:
+            await call.message.answer(
+                f"🎬 <b>{genre['name']}</b> — {len(movies)} ta kino\n\nKinoni tanlang:",
+                reply_markup=movies_keyboard(movies, back_callback="all_movies")
+            )
+            return
+
+    # Bosh sahifaga qaytish
+    text = (
+        "🎬 <b>MACROICE Cinema botiga xush kelibsiz!</b>\n\n"
+        "🔢 Kerakli film uchun kodni yozing"
+    )
+    try:
+        await call.message.answer_animation(
+            animation=BANNER_GIF,
+            caption=text,
+            reply_markup=main_keyboard()
+        )
+    except Exception:
+        await call.message.answer(text, reply_markup=main_keyboard())
 
 # ── Saqlash ────────────────────────────────────────────
 @router.callback_query(F.data.startswith("save:"))
