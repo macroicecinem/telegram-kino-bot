@@ -438,8 +438,8 @@ async def watch_movie(call: CallbackQuery, bot: Bot):
         except Exception:
             pass
 
-        # Forward qilish
-        forwarded = await bot.forward_message(
+        # Kanal postini COPY qilish (forward emas)
+        copied = await bot.copy_message(
             chat_id=call.from_user.id,
             from_chat_id=channel,
             message_id=post_id
@@ -449,7 +449,7 @@ async def watch_movie(call: CallbackQuery, bot: Bot):
         back_builder = InlineKeyboardBuilder()
         back_builder.button(
             text="⬅️ Orqaga",
-            callback_data=f"delete_and_back:{movie_id}:{genre_id}:{forwarded.message_id}"
+            callback_data=f"delete_and_back:{movie_id}:{genre_id}:{copied.message_id}"
         )
         back_msg = await bot.send_message(
             chat_id=call.from_user.id,
