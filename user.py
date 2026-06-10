@@ -458,7 +458,28 @@ async def watch_movie(call: CallbackQuery, bot: Bot):
         )
 
     except Exception as e:
-        await call.answer("❌ Film yuklanmadi, keyinroq urinib ko'ring!", show_alert=True)
+        # Forward ishlamasa link bilan ochish
+        if movie.get("link"):
+            await call.answer("⚠️ Bot filmni yuklay olmadi. Kanal orqali oching!", show_alert=True)
+            link_builder = InlineKeyboardBuilder()
+            link_builder.button(text="▶️ Kanal orqali ko'rish", url=movie["link"])
+            genre_id = movie.get("genre_id") or 0
+            if genre_id:
+                link_builder.button(text="⬅️ Orqaga", callback_data=f"genre:{genre_id}")
+            else:
+                link_builder.button(text="⬅️ Orqaga", callback_data="back_main")
+            link_builder.adjust(1)
+            title = movie.get("title", "Film")
+            try:
+                await bot.send_message(
+                    call.from_user.id,
+                    f"🎬 <b>{title}</b>\n\n▶️ Filmni ko'rish uchun tugmani bosing:",
+                    reply_markup=link_builder.as_markup()
+                )
+            except Exception:
+                pass
+        else:
+            await call.answer("❌ Film yuklanmadi!", show_alert=True)
 
 
 # ── O'chirib orqaga ────────────────────────────────────
