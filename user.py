@@ -30,8 +30,11 @@ async def check_subscription(bot: Bot, user_id: int) -> bool:
             member = await bot.get_chat_member(channel["username"], user_id)
             if member.status in ("left", "kicked", "banned"):
                 return False
-        except Exception:
-            return False
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"check_subscription error for {channel['username']}: {e}")
+            # Xato bo'lsa o'tkazib yuboramiz (bot admin emas bo'lishi mumkin)
+            continue
     return True
 
 
