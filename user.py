@@ -33,9 +33,17 @@ async def check_subscription(bot: Bot, user_id: int) -> bool:
         except Exception as e:
             import logging
             logging.getLogger(__name__).error(f"check_subscription error for {channel['username']}: {e}")
-            # Xato bo'lsa o'tkazib yuboramiz (bot admin emas bo'lishi mumkin)
             continue
     return True
+
+
+async def check_subscription_strict(bot: Bot, user_id: int) -> bool:
+    """Faqat Telegram kanal tekshiradi"""
+    try:
+        member = await bot.get_chat_member("@macroicecinema", user_id)
+        return member.status not in ("left", "kicked", "banned")
+    except Exception:
+        return True  # Xato bo'lsa kirsin
 
 
 def subscription_keyboard():
@@ -182,6 +190,19 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
     await show_main_menu(message)
 
 
+
+
+@router.message(Command("checkme"))
+async def cmd_checkme(message: Message, bot: Bot):
+    user_id = message.from_user.id
+    result = ""
+    try:
+        member = await bot.get_chat_member("@macroicecinema", user_id)
+        result += f"@macroicecinema: {member.status}\n"
+    except Exception as e:
+        result += f"@macroicecinema: XATO — {e}\n"
+    await message.answer(f"<b>Obuna holati:</b>\n{result}")
+
 # ── /kinolar ───────────────────────────────────────────
 @router.message(Command("kinolar"))
 async def cmd_kinolar(message: Message, bot: Bot):
@@ -231,7 +252,7 @@ async def wrong_phone(message: Message):
 # ── Obuna ──────────────────────────────────────────────
 @router.callback_query(F.data == "check_sub")
 async def check_sub_callback(call: CallbackQuery, bot: Bot):
-    if not await check_subscription(bot, call.from_user.id):
+    if not await check_subscription_strict(bot, call.from_user.id):
         await call.answer("❌ Siz hali @macroicecinema kanaliga obuna bo'lmadingiz!", show_alert=True)
         return
     await call.message.delete()
