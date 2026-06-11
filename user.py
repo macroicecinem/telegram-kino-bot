@@ -59,7 +59,7 @@ def main_keyboard():
     builder.button(text="📂 Filter", callback_data="filter_menu")
     builder.button(text="⭐️ Saqlangan", callback_data="saved_movies")
     builder.button(text="❓ Yordam", callback_data="help_menu")
-    builder.button(text="💳 Donat", url="https://idonate.uz/d/MACROICE")
+    builder.button(text="💳 Donat qilish", callback_data="donate_menu")
     builder.adjust(2)
     return builder.as_markup()
 
@@ -855,6 +855,32 @@ async def contact_admin_send(message: Message, state: FSMContext, bot: Bot):
     builder = InlineKeyboardBuilder()
     builder.button(text="🏠 Bosh sahifa", callback_data="back_main")
     await message.answer("Bosh sahifaga qaytish:", reply_markup=builder.as_markup())
+
+
+
+# ── Donat ──────────────────────────────────────────────
+@router.callback_query(F.data == "donate_menu")
+async def donate_menu(call: CallbackQuery):
+    builder = InlineKeyboardBuilder()
+    builder.button(text="💳 iDonate", url="https://idonate.uz/d/MACROICE")
+    builder.button(text="💚 Tirikchilik", url="https://tirikchilik.uz/macroice")
+    builder.button(text="⬅️ Orqaga", callback_data="back_main")
+    builder.adjust(1)
+    try:
+        await call.message.edit_text(
+            "💳 <b>Donat qilish</b>\n\n"
+            "MACROICE Cinema botini rivojlantirish uchun donat qilishingiz mumkin!\n\n"
+            "Quyidagi usullardan birini tanlang 👇",
+            reply_markup=builder.as_markup()
+        )
+    except Exception:
+        await call.message.delete()
+        await call.message.answer(
+            "💳 <b>Donat qilish</b>\n\n"
+            "MACROICE Cinema botini rivojlantirish uchun donat qilishingiz mumkin!\n\n"
+            "Quyidagi usullardan birini tanlang 👇",
+            reply_markup=builder.as_markup()
+        )
 
 # ── Qidirish ───────────────────────────────────────────
 @router.callback_query(F.data == "search")
