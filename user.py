@@ -37,8 +37,7 @@ async def check_subscription(bot: Bot, user_id: int) -> bool:
 
 def subscription_keyboard():
     builder = InlineKeyboardBuilder()
-    for ch in REQUIRED_CHANNELS:
-        builder.button(text=ch["name"], url=ch["url"])
+    builder.button(text="🎬 MACROICE Cinema", url="https://t.me/macroicecinema")
     builder.button(text="▶️ YouTube kanal", url=YOUTUBE_URL)
     builder.button(text="📸 Instagram", url=INSTAGRAM_URL)
     builder.button(text="✅ Obuna bo'ldim!", callback_data="check_sub")
