@@ -86,6 +86,13 @@ def init_db():
         except Exception:
             conn.rollback()
 
+    # Janr uchun moslashtiriladigan matn ustuni
+    try:
+        c.execute("ALTER TABLE genres ADD COLUMN genre_text TEXT")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+
     default_genres = ["Fantastika", "Drama", "Komediya", "Qo'rqinchli"]
     for g in default_genres:
         c.execute("INSERT INTO genres (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (g,))
@@ -200,6 +207,23 @@ def delete_genre(genre_id: int):
     conn = get_conn()
     c = conn.cursor()
     c.execute("DELETE FROM genres WHERE id=%s", (genre_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_genre(genre_id: int):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM genres WHERE id=%s", (genre_id,))
+    row = c.fetchone()
+    conn.close()
+    return row
+
+
+def update_genre_text(genre_id: int, text: str = None):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("UPDATE genres SET genre_text=%s WHERE id=%s", (text, genre_id))
     conn.commit()
     conn.close()
 
