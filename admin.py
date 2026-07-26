@@ -26,6 +26,10 @@ class AddGenre(StatesGroup):
     name = State()
 
 
+class EditGenreText(StatesGroup):
+    value = State()
+
+
 class AddAdmin(StatesGroup):
     user_id = State()
 
@@ -115,11 +119,11 @@ async def admin_callback(call: CallbackQuery, state: FSMContext):
         genres = db.get_genres()
         builder = InlineKeyboardBuilder()
         for g in genres:
-            builder.button(text=f"🗑 {g['name']}", callback_data=f"del_genre:{g['id']}")
+            builder.button(text=f"🎭 {g['name']}", callback_data=f"genre_manage:{g['id']}")
         builder.button(text="⬅️ Panel", callback_data="admin:back")
         builder.adjust(2)
         await call.message.edit_text(
-            f"📂 <b>Janrlar</b> ({len(genres)} ta)\n\n🗑 O'chirish uchun bosing:",
+            f"📂 <b>Janrlar</b> ({len(genres)} ta)\n\nBoshqarish uchun janrni tanlang:",
             reply_markup=builder.as_markup()
         )
 
@@ -339,13 +343,60 @@ async def delete_genre(call: CallbackQuery):
     genres = db.get_genres()
     builder = InlineKeyboardBuilder()
     for g in genres:
-        builder.button(text=f"🗑 {g['name']}", callback_data=f"del_genre:{g['id']}")
+        builder.button(text=f"🎭 {g['name']}", callback_data=f"genre_manage:{g['id']}")
     builder.button(text="⬅️ Panel", callback_data="admin:back")
     builder.adjust(2)
     await call.message.edit_text(
-        f"📂 <b>Janrlar</b> ({len(genres)} ta)\n\n🗑 O'chirish uchun bosing:",
+        f"📂 <b>Janrlar</b> ({len(genres)} ta)\n\nBoshqarish uchun janrni tanlang:",
         reply_markup=builder.as_markup()
     )
+
+
+@router.callback_query(F.data.startswith("genre_manage:"))
+async def genre_manage(call: CallbackQuery):
+    if not db.is_admin(call.from_user.id):
+        await call.answer("❌ Ruxsat yo'q!", show_alert=True)
+        return
+    genre_id = int(call.data.split(":")[1])
+    genre = db.get_genre(genre_id)
+    if not genre:
+        await call.answer("Janr topilmadi!", show_alert=True)
+        return
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✏️ Matnni o'zgartirish", callback_data=f"edit_genre_text:{genre_id}")
+    builder.button(text="🗑 O'chirish", callback_data=f"del_genre:{genre_id}")
+    builder.button(text="⬅️ Orqaga", callback_data="admin:list_genres")
+    builder.adjust(1)
+    current_text = genre.get("genre_text") or "(sozlanmagan — standart matn ishlatiladi)"
+    await call.message.edit_text(
+        f"🎭 <b>{genre['name']}</b>\n\nJanr ochilganda ko'rinadigan matn:\n<i>{current_text}</i>",
+        reply_markup=builder.as_markup()
+    )
+
+
+@router.callback_query(F.data.startswith("edit_genre_text:"))
+async def edit_genre_text_start(call: CallbackQuery, state: FSMContext):
+    if not db.is_admin(call.from_user.id):
+        await call.answer("❌ Ruxsat yo'q!", show_alert=True)
+        return
+    genre_id = int(call.data.split(":")[1])
+    await state.set_state(EditGenreText.value)
+    await state.update_data(genre_id=genre_id)
+    await call.message.answer(
+        "✏️ Bu janr ochilganda ko'rinadigan matnni kiriting:\n\n"
+        "<i>(standart matnga qaytarish uchun — belgisini yuboring)</i>"
+    )
+    await call.answer()
+
+
+@router.message(EditGenreText.value)
+async def edit_genre_text_save(message: Message, state: FSMContext):
+    data = await state.get_data()
+    genre_id = data["genre_id"]
+    text = message.text.strip()
+    db.update_genre_text(genre_id, None if text == "—" else text)
+    await state.clear()
+    await message.answer("✅ Janr matni yangilandi!\n\n/admin — panelga qaytish")
 
 
 @router.callback_query(F.data.startswith("del_admin:"))
