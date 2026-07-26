@@ -1,6 +1,6 @@
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -137,12 +137,57 @@ async def show_main_menu(message: Message):
         await message.answer(text, reply_markup=main_keyboard())
 
 
-@router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext, bot: Bot):
+async def show_movie_by_code(message: Message, code: str, user_id: int, bot: Bot) -> bool:
+    """Kod bo'yicha kinoni topib, foydalanuvchiga ko'rsatadi.
+    Kanaldagi https://t.me/BOT_USERNAME?start=KOD ssilkasi bosilganda ham,
+    botga kod yozib yuborilganda ham shu funksiya ishlaydi."""
+    movie_row = db.get_movie_by_code(code)
+    if not movie_row:
+        await message.answer(f"❌ <b>{code}</b> kodli kino topilmadi.")
+        return False
+
+    movie = dict(movie_row)
+    db.increment_views(movie["id"])
+
+    if movie.get("channel_post_id") and movie.get("channel_username"):
+        channel = movie["channel_username"]
+        if not channel.startswith("@"):
+            channel = "@" + channel
+        genre_id = movie.get("genre_id") or 0
+        try:
+            sent_msg = None
+            try:
+                sent_msg = await bot.copy_message(chat_id=user_id, from_chat_id=channel, message_id=movie["channel_post_id"])
+            except Exception:
+                sent_msg = await bot.forward_message(chat_id=user_id, from_chat_id=channel, message_id=movie["channel_post_id"])
+            back_builder = InlineKeyboardBuilder()
+            back_builder.button(text="⬅️ Orqaga", callback_data=f"delete_and_back:{movie['id']}:{genre_id}:{sent_msg.message_id}")
+            await bot.send_message(chat_id=user_id, text="👆 Film yuqorida", reply_markup=back_builder.as_markup())
+            return True
+        except Exception:
+            pass
+
+    text = movie_card_text(movie)
+    kb = movie_keyboard(movie, user_id)
+    if movie.get("poster_url"):
+        try:
+            await message.answer_photo(photo=movie["poster_url"], caption=text, reply_markup=kb)
+            return True
+        except Exception:
+            pass
+    await message.answer(text, reply_markup=kb)
+    return True
+
+
+@router.message(CommandStart(deep_link=True))
+async def cmd_start(message: Message, command: CommandObject, state: FSMContext, bot: Bot):
     user_id = message.from_user.id
     user = db.get_user(user_id)
+    payload = command.args  # https://t.me/BOT_USERNAME?start=717 -> "717"
 
     if not user:
+        if payload:
+            await state.update_data(pending_code=payload)
         await state.set_state(Registration.phone)
         await message.answer(
             "👋 <b>Assalomu alaykum!</b>\n\nBotdan foydalanish uchun telefon raqamingizni tasdiqlang 👇",
@@ -152,6 +197,8 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
 
     subscribed = await check_subscription(bot, user_id)
     if not subscribed:
+        if payload:
+            await state.update_data(pending_code=payload)
         try:
             await message.answer_animation(
                 animation=BANNER_GIF,
@@ -172,6 +219,11 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
             )
         return
 
+    if payload:
+        shown = await show_movie_by_code(message, payload, user_id, bot)
+        if shown:
+            return
+
     await show_main_menu(message)
 
 
@@ -187,10 +239,14 @@ async def cmd_kinolar(message: Message, bot: Bot):
 async def get_phone(message: Message, state: FSMContext, bot: Bot):
     user_id = message.from_user.id
     db.add_user(user_id, message.contact.phone_number, message.from_user.username, message.from_user.full_name)
+    data = await state.get_data()
+    pending_code = data.get("pending_code")
     await state.clear()
     await message.answer("✅ <b>Telefon raqam tasdiqlandi!</b>", reply_markup=ReplyKeyboardRemove())
     subscribed = await check_subscription(bot, user_id)
     if not subscribed:
+        if pending_code:
+            await state.update_data(pending_code=pending_code)
         try:
             await message.answer_animation(
                 animation=BANNER_GIF,
@@ -207,6 +263,10 @@ async def get_phone(message: Message, state: FSMContext, bot: Bot):
         except Exception:
             await message.answer("📢 <b>MACROICE kanallariga obuna bo'ling:</b>", reply_markup=subscription_keyboard())
         return
+    if pending_code:
+        shown = await show_movie_by_code(message, pending_code, user_id, bot)
+        if shown:
+            return
     await show_main_menu(message)
 
 
@@ -216,11 +276,18 @@ async def wrong_phone(message: Message):
 
 
 @router.callback_query(F.data == "check_sub")
-async def check_sub_callback(call: CallbackQuery, bot: Bot):
+async def check_sub_callback(call: CallbackQuery, bot: Bot, state: FSMContext):
     if not await check_subscription(bot, call.from_user.id):
         await call.answer("❌ Siz hali @macroicecinema kanaliga obuna bo'lmadingiz!", show_alert=True)
         return
     await call.message.delete()
+    data = await state.get_data()
+    pending_code = data.get("pending_code")
+    if pending_code:
+        await state.update_data(pending_code=None)
+        shown = await show_movie_by_code(call.message, pending_code, call.from_user.id, bot)
+        if shown:
+            return
     await show_main_menu(call.message)
 
 
@@ -307,20 +374,27 @@ async def saga_selected(call: CallbackQuery, bot: Bot):
     parts = call.data.split(":", 2)
     genre_id = int(parts[1])
     saga_name = parts[2]
+    saga_custom_text = None
     if saga_name == "__nosaga__":
         movies = db.get_movies_without_saga(genre_id)
         title = "📽 Boshqa kinolar"
     else:
         movies = db.get_movies_by_saga(saga_name, genre_id)
         title = saga_name
+        sagas = db.get_sagas_by_genre(genre_id)
+        saga_row = next((s for s in sagas if s["name"] == saga_name), None)
+        if saga_row:
+            saga_custom_text = saga_row.get("saga_text")
     if not movies:
         await call.answer("Bu sagada kino yo'q 😕", show_alert=True)
         return
+    body = saga_custom_text or "Kinoni tanlang:"
+    text = f"🎬 <b>{title}</b> — {len(movies)} ta kino\n\n{body}"
     try:
-        await call.message.edit_text(f"🎬 <b>{title}</b> — {len(movies)} ta kino\n\nKinoni tanlang:", reply_markup=movies_keyboard(movies, back_callback=f"genre:{genre_id}"))
+        await call.message.edit_text(text, reply_markup=movies_keyboard(movies, back_callback=f"genre:{genre_id}"))
     except Exception:
         await call.message.delete()
-        await call.message.answer(f"🎬 <b>{title}</b> — {len(movies)} ta kino\n\nKinoni tanlang:", reply_markup=movies_keyboard(movies, back_callback=f"genre:{genre_id}"))
+        await call.message.answer(text, reply_markup=movies_keyboard(movies, back_callback=f"genre:{genre_id}"))
 
 
 @router.callback_query(F.data.startswith("movie:"))
@@ -701,17 +775,7 @@ async def handle_text(message: Message, bot: Bot):
         return
     movie_by_code = db.get_movie_by_code(query)
     if movie_by_code:
-        movie = dict(movie_by_code)
-        db.increment_views(movie["id"])
-        text = movie_card_text(movie)
-        kb = movie_keyboard(movie, message.from_user.id)
-        if movie.get("poster_url"):
-            try:
-                await message.answer_photo(photo=movie["poster_url"], caption=text, reply_markup=kb)
-            except Exception:
-                await message.answer(text, reply_markup=kb)
-        else:
-            await message.answer(text, reply_markup=kb)
+        await show_movie_by_code(message, query, message.from_user.id, bot)
         return
     if len(query) < 2:
         return
