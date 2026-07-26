@@ -179,7 +179,7 @@ async def show_movie_by_code(message: Message, code: str, user_id: int, bot: Bot
     return True
 
 
-@router.message(CommandStart(deep_link=True))
+@router.message(Command("start"))
 async def cmd_start(message: Message, command: CommandObject, state: FSMContext, bot: Bot):
     user_id = message.from_user.id
     user = db.get_user(user_id)
