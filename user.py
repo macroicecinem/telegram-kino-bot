@@ -263,8 +263,8 @@ async def genre_selected(call: CallbackQuery, bot: Bot):
         await call.answer("Janr topilmadi!", show_alert=True)
         return
     sagas = db.get_sagas_by_genre(genre_id)
-    is_marvel = genre and genre["name"].lower() == "marvel"
-    if sagas and is_marvel:
+    custom_text = genre.get("genre_text")
+    if sagas:
         builder = InlineKeyboardBuilder()
         for saga in sagas:
             movies_in_saga = db.get_movies_by_saga(saga["name"], genre_id)
@@ -275,21 +275,28 @@ async def genre_selected(call: CallbackQuery, bot: Bot):
         builder.button(text="⬅️ Orqaga", callback_data="all_movies")
         builder.adjust(1)
         total = db.get_movies_by_genre(genre_id)
+        body = custom_text or (
+            "📽 Filmlarni to'g'ri tartibda va tushunarli tarzda tomosha qilish uchun "
+            "quyidagi fazalardan birini tanlang 👇"
+        )
+        saga_text = f"🎬 <b>{genre['name']}</b> — {len(total)} ta kino\n\n{body}"
         try:
-            await call.message.edit_text(f"🎬 <b>{genre['name']}</b> — {len(total)} ta kino\n\nSagani tanlang:", reply_markup=builder.as_markup())
+            await call.message.edit_text(saga_text, reply_markup=builder.as_markup())
         except Exception:
             await call.message.delete()
-            await call.message.answer(f"🎬 <b>{genre['name']}</b> — {len(total)} ta kino\n\nSagani tanlang:", reply_markup=builder.as_markup())
+            await call.message.answer(saga_text, reply_markup=builder.as_markup())
     else:
         movies = db.get_movies_by_genre(genre_id)
         if not movies:
             await call.answer("Bu janrda hali kino yo'q 😕", show_alert=True)
             return
+        body = custom_text or "Kinoni tanlang:"
+        text = f"🎬 <b>{genre['name']}</b> — {len(movies)} ta kino\n\n{body}"
         try:
-            await call.message.edit_text(f"🎬 <b>{genre['name']}</b> — {len(movies)} ta kino\n\nKinoni tanlang:", reply_markup=movies_keyboard(movies, back_callback="all_movies"))
+            await call.message.edit_text(text, reply_markup=movies_keyboard(movies, back_callback="all_movies"))
         except Exception:
             await call.message.delete()
-            await call.message.answer(f"🎬 <b>{genre['name']}</b> — {len(movies)} ta kino\n\nKinoni tanlang:", reply_markup=movies_keyboard(movies, back_callback="all_movies"))
+            await call.message.answer(text, reply_markup=movies_keyboard(movies, back_callback="all_movies"))
 
 
 @router.callback_query(F.data.startswith("saga:"))
